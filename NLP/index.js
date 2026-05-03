@@ -4,26 +4,47 @@ const multer = require('multer');
 const pdf = require('pdf-parse');
 const mammoth = require('mammoth');
 const cors = require('cors');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// ── Gemini client (lazy — only initialised if key is present) ────────────────
+// ── Gemini REST (direct v1 endpoint — avoids SDK v1beta issues) ────────────────
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-let geminiModel = null;
-if (GEMINI_KEY) {
-  try {
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-    geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    console.log('✅ Gemini model initialised (gemini-1.5-flash)');
-  } catch (e) {
-    console.warn('⚠️  Gemini init failed:', e.message);
+// Try these models in order
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+
+async function callGeminiREST(promptText) {
+  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
+
+  for (const model of GEMINI_MODELS) {
+    // Try v1 first, then v1beta
+    for (const apiVer of ['v1', 'v1beta']) {
+      const url = `https://generativelanguage.googleapis.com/${apiVer}/models/${model}:generateContent?key=${GEMINI_KEY}`;
+      try {
+        const { data } = await axios.post(url, {
+          contents: [{ role: 'user', parts: [{ text: promptText }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+        }, { timeout: 30000 });
+
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (!raw) throw new Error('Empty response');
+
+        // Strip accidental markdown fences
+        const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        console.log(`[GEMINI] Success via ${apiVer}/${model}`);
+        return { parsed, model };
+      } catch (e) {
+        const msg = e?.response?.data?.error?.message || e.message || 'unknown';
+        console.warn(`[GEMINI] ${apiVer}/${model} failed: ${msg.slice(0, 100)}`);
+      }
+    }
   }
-} else {
-  console.warn('⚠️  GEMINI_API_KEY not set — /api/ai-mentor will use fallback data');
+  throw new Error('All Gemini models exhausted');
 }
+
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -398,6 +419,28 @@ app.post('/api/resume/parse', upload.single('resume'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+function buildFallback(role, score, gaps) {
+  const gap = gaps[0] || 'the required skills';
+  return {
+    insight: `Your ${score}% readiness score is the primary blocker for ${role} roles — specifically the missing ${gap} skill.`,
+    reason: `Analysis of 10,000+ ${role} job postings shows ${gap} appears in 89% of requirements. Your current score of ${score}% places you in the bottom quartile for this role. Recruiters use ATS systems that filter resumes before human review, and missing key skills like ${gap} triggers automatic rejection.`,
+    actions: [
+      `Complete a structured ${gap} course (aim for 20 hours over 2 weeks)`,
+      `Build one end-to-end project demonstrating ${gap} and add it to your GitHub`,
+      `Update your resume with ${gap}-related keywords and quantified achievements`
+    ],
+    roadmap: [
+      `Day 1: Start ${gap} fundamentals — 3-hour crash course (YouTube or Coursera free tier)`,
+      `Day 2: Complete 10 practice exercises to solidify core ${gap} concepts`,
+      `Day 3: Begin a mini project combining ${gap} with your existing skills`,
+      `Week 1: Finish and publish the project on GitHub with a detailed README`,
+      `Week 2: Update resume, apply to 10 targeted ${role} roles with tailored cover letters`
+    ],
+    today_task: `Set up your ${gap} learning environment and complete the first module of a structured course (target: 2-3 hours)`
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai-mentor
 // Body: { userData: { role, score, gaps[] }, question: string }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,43 +489,21 @@ Respond ONLY with a valid JSON object. No markdown, no explanation, no code fenc
 }`;
 
     let aiResponse;
+    let modelUsed = 'fallback';
 
-    if (geminiModel) {
-      // ── Call real Gemini API ──────────────────────────────────────────────
-      const result = await geminiModel.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        }
-      });
-
-      const raw = result.response.text();
-      // Strip any accidental markdown code fences
-      const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-      aiResponse = JSON.parse(cleaned);
-      console.log('[AI-MENTOR] Gemini responded successfully');
+    if (GEMINI_KEY) {
+      try {
+        const { parsed, model } = await callGeminiREST(prompt);
+        aiResponse = parsed;
+        modelUsed = model;
+        console.log('[AI-MENTOR] Gemini responded successfully');
+      } catch (e) {
+        console.warn('[AI-MENTOR] Gemini failed, using fallback:', e.message);
+        aiResponse = buildFallback(role, score, gaps);
+      }
     } else {
-      // ── Fallback demo data (no API key) ──────────────────────────────────
-      console.warn('[AI-MENTOR] Using fallback data (no Gemini key)');
-      const gap = gaps[0] || 'the required skills';
-      aiResponse = {
-        insight: `Your ${score}% readiness score is the primary blocker for ${role} roles — specifically the missing ${gap} skill.`,
-        reason: `Analysis of 10,000+ ${role} job postings shows ${gap} appears in 89% of requirements. Your current score of ${score}% places you in the bottom quartile for this role. Recruiters use ATS systems that filter resumes before human review, and missing key skills like ${gap} triggers automatic rejection.`,
-        actions: [
-          `Complete a structured ${gap} course (aim for 20 hours over 2 weeks)`,
-          `Build one end-to-end project demonstrating ${gap} and add it to your GitHub`,
-          `Update your resume with ${gap}-related keywords and quantified achievements`
-        ],
-        roadmap: [
-          `Day 1: Start ${gap} fundamentals — 3-hour crash course (YouTube or Coursera free tier)`,
-          `Day 2: Complete 10 practice exercises to solidify core ${gap} concepts`,
-          `Day 3: Begin a mini project combining ${gap} with your existing skills`,
-          `Week 1: Finish and publish the project on GitHub with a detailed README`,
-          `Week 2: Update resume, apply to 10 targeted ${role} roles with tailored cover letters`
-        ],
-        today_task: `Set up your ${gap} learning environment and complete the first module of a structured course (target: 2-3 hours)`
-      };
+      console.warn('[AI-MENTOR] No API key — using fallback data');
+      aiResponse = buildFallback(role, score, gaps);
     }
 
     // ── Validate structure before sending ──────────────────────────────────
@@ -501,7 +522,7 @@ Respond ONLY with a valid JSON object. No markdown, no explanation, no code fenc
         role,
         score,
         gaps,
-        model: geminiModel ? 'gemini-1.5-flash' : 'fallback',
+        model: modelUsed,
         timestamp: Date.now()
       }
     });
@@ -522,5 +543,5 @@ app.listen(PORT, () => {
   console.log(`   GET  http://localhost:${PORT}/`);
   console.log(`   POST http://localhost:${PORT}/api/resume/parse`);
   console.log(`   POST http://localhost:${PORT}/api/ai-mentor`);
-  console.log(`   Gemini: ${geminiModel ? '🟢 active' : '🔴 fallback mode'}\n`);
+  console.log(`   Gemini: ${GEMINI_KEY ? '🟢 active via REST' : '🔴 fallback mode'}\n`);
 });
