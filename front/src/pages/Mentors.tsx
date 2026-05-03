@@ -21,9 +21,17 @@ const BACKEND_URL = 'http://localhost:5000';
 interface AIResponse {
   insight: string;
   reason: string;
+  impact: string;
+  priority_skill: string;
   actions: string[];
-  roadmap: string[];
-  today_task: string;
+  roadmap: {
+    day: string;
+    task: string;
+    difficulty: string;
+    time: string;
+    focus: string;
+  }[];
+  smart_tip: string;
 }
 
 interface ConversationItem {
@@ -41,10 +49,11 @@ interface UserProfile {
   gapDetails: { name: string; isPartial: boolean }[];
   experience_years: number;
   rawSkills: { name: string; occurrences: number }[];
+  projects: { title: string; description: string; tools: string[] }[];
 }
 
 // ─── Secure backend call — API key NEVER leaves the server ────────────────────
-async function callAIMentor(userProfile: UserProfile, question: string): Promise<AIResponse> {
+async function callAIMentor(userProfile: UserProfile, question: string, history: ConversationItem[]): Promise<AIResponse> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/ai-mentor`, {
       method: 'POST',
@@ -55,9 +64,14 @@ async function callAIMentor(userProfile: UserProfile, question: string): Promise
           score: userProfile.readinessScore,
           skills: userProfile.skills,
           gaps: userProfile.gaps,
-          experience_years: userProfile.experience_years
+          experience_years: userProfile.experience_years,
+          projects: userProfile.projects
         },
-        question
+        question,
+        conversationHistory: history.slice(-5).map(h => ({ 
+          user: h.question, 
+          ai_insight: h.response.insight 
+        }))
       })
     });
 
@@ -67,13 +81,14 @@ async function callAIMentor(userProfile: UserProfile, question: string): Promise
     }
 
     const data = await res.json();
-    // Return only the structured fields — ignore meta
     return {
       insight: data.insight,
       reason: data.reason,
+      impact: data.impact,
+      priority_skill: data.priority_skill,
       actions: data.actions,
       roadmap: data.roadmap,
-      today_task: data.today_task
+      smart_tip: data.smart_tip
     };
   } catch (err) {
     console.error('AI Mentor error:', err);
@@ -83,31 +98,27 @@ async function callAIMentor(userProfile: UserProfile, question: string): Promise
 
 function generateFallback(profile: UserProfile, question: string): AIResponse {
   const gap = profile.gaps[0] || 'SQL';
-  const gap2 = profile.gaps[1] || gap;
-  const skill = profile.skills[0] || 'your existing skills';
   const role = profile.targetRole;
-  const score = profile.readinessScore;
 
   return {
-    insight: `Your ${score}% readiness score is below the competitive threshold for ${role} roles — the critical blocker is your missing ${gap} skill.`,
-    reason: `${role} job postings require ${gap} in 89% of listings. Your score of ${score}% places you below competitive candidates. Recruiters use ATS systems that filter resumes before human review, and missing ${gap} and ${gap2} triggers automatic rejection. Your strength in ${skill} is a good foundation but insufficient alone.`,
+    insight: `Unable to dynamically analyze profile right now.`,
+    reason: `The AI service is temporarily unavailable. We noticed you are targeting ${role} roles.`,
+    impact: `Cannot evaluate exact job readiness at this moment.`,
+    priority_skill: gap,
     actions: [
-      `Complete a structured ${gap} course (target: 20 hours over 2 weeks)`,
-      `Build one end-to-end project demonstrating ${gap} and publish it on GitHub`,
-      `Update your resume with ${gap}-related keywords and quantified achievements`,
-      `Network with 3 ${role} professionals on LinkedIn this week`,
-      `Practice explaining your ${skill} projects in a 2-minute interview pitch`
+      `Review your ${gap} skills`,
+      `Try asking your question again in a few moments.`
     ],
     roadmap: [
-      `Day 1-2 [Beginner | 3 hrs | ${gap}]: Learn ${gap} fundamentals (YouTube crash course or Coursera free tier)`,
-      `Day 3-4 [Beginner | 4 hrs | ${gap}]: Complete 10 practice exercises to solidify core ${gap} concepts`,
-      `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Build a mini project combining ${gap} with ${skill}`,
-      `Day 7 [Intermediate | 2 hrs | ${gap2}]: Start ${gap2} basics and link it to your project`,
-      `Week 2 [Intermediate | 8 hrs | Project]: Polish your project, write documentation, deploy to GitHub`,
-      `Week 3 [Advanced | 4 hrs | Career]: Update resume, tailor for 5 ${role} postings, submit applications`,
-      `Week 4 [Advanced | 3 hrs | Interview]: Do 3 mock interviews focusing on ${gap} and ${gap2} scenarios`
+      {
+        day: "Day 1",
+        task: `Brush up on ${gap}`,
+        difficulty: "Medium",
+        time: "2 hrs",
+        focus: gap
+      }
     ],
-    today_task: `Set up your ${gap} learning environment and complete the first module of a free course (target: 2-3 hours)`
+    smart_tip: "Our fallback system is active. Check your network or API keys."
   };
 }
 
@@ -146,13 +157,23 @@ function ResponseCard({ item, index }: { item: ConversationItem; index: number }
 
       {/* Structured response */}
       <div className="space-y-3 mb-6">
-        {/* Insight */}
-        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
-          <div className="flex items-center gap-2 mb-2">
-            <Lightbulb size={15} className="text-emerald-500" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Insight</span>
+        {/* Insight & Impact */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Insight</span>
+            </div>
+            <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.insight}</p>
           </div>
-          <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.insight}</p>
+          
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle size={15} className="text-amber-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Impact</span>
+            </div>
+            <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.impact}</p>
+          </div>
         </div>
 
         {/* Reason */}
@@ -186,24 +207,39 @@ function ResponseCard({ item, index }: { item: ConversationItem; index: number }
               <Calendar size={15} className="text-emerald-500" />
               <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Roadmap</span>
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {r.roadmap.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                  <span className="text-emerald-500 font-bold text-xs mt-0.5 shrink-0">{i + 1}.</span>
-                  {step}
+                <li key={i} className="flex flex-col gap-1 text-sm text-slate-600 border-l-2 border-emerald-200 pl-3 ml-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-600 font-bold text-xs">{step.day}</span>
+                    <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{step.difficulty}</span>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">{step.time}</span>
+                  </div>
+                  <span className="font-medium text-slate-800">{step.task}</span>
+                  <span className="text-xs text-slate-500">Focus: {step.focus}</span>
                 </li>
               ))}
             </ul>
           </div>
         </div>
 
-        {/* Today's Task */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Zap size={15} className="text-emerald-600" />
-            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Today's Task</span>
+        {/* Smart Tip & Priority Skill */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap size={15} className="text-emerald-600" />
+              <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Smart Tip</span>
+            </div>
+            <p className="text-emerald-950 text-sm font-medium">{r.smart_tip}</p>
           </div>
-          <p className="text-emerald-950 text-sm font-semibold">{r.today_task}</p>
+          
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={15} className="text-amber-600" />
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Priority Skill</span>
+            </div>
+            <p className="text-amber-950 text-sm font-bold text-lg">{r.priority_skill}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -289,7 +325,8 @@ export default function Mentors() {
         gaps: gaps,
         gapDetails: gapDetails,
         experience_years: parsedData.experience_years || 0,
-        rawSkills: extractedSkills.map((s: any) => ({ name: s.name, occurrences: s.occurrences }))
+        rawSkills: extractedSkills.map((s: any) => ({ name: s.name, occurrences: s.occurrences })),
+        projects: parsedData.projects || []
       });
     } catch (e) {
       console.error('Error parsing saved resume data:', e);
@@ -306,7 +343,7 @@ export default function Mentors() {
     setActiveAction(actionId || null);
     setCustomInput('');
 
-    const response = await callAIMentor(profile, question);
+    const response = await callAIMentor(profile, question, conversations);
     setConversations(prev => [...prev, { question, response, timestamp: new Date() }]);
     setLoading(false);
     setActiveAction(null);

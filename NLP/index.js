@@ -94,7 +94,7 @@ function buildFallback(role, score, gaps, skills) {
 app.post('/api/ai-mentor', async (req, res) => {
   const startTime = Date.now();
   try {
-    const { userData, question } = req.body;
+    const { userData, question, conversationHistory = [] } = req.body;
 
     if (!userData || !question) {
       return res.status(400).json({
@@ -102,52 +102,51 @@ app.post('/api/ai-mentor', async (req, res) => {
       });
     }
 
-    const { role = 'Software Developer', score = 50, gaps = [], skills = [] } = userData;
+    const { 
+      role = 'Software Developer', 
+      score = 50, 
+      gaps = [], 
+      skills = [],
+      projects = [],
+      experience_years = 0
+    } = userData;
 
     console.log(`\n[AI-MENTOR] Role:${role} | Score:${score} | Skills:${skills.join(',')} | Gaps:${gaps.join(',')} | Q:"${question.slice(0, 60)}"`);
 
-    // ── Build the system prompt ──────────────────────────────────────────────
-    const prompt = `You are an expert AI career mentor. You are NOT a chatbot — you are a Career Coach + Analyst + Planner.
+    // ── Build the system prompt (MULTI-AGENT PIPELINE) ─────────────────────
+    const prompt = `You are a Multi-Agent AI System acting as a competition-grade Career Mentor.
+You simulate 5 internal agents in a single pipeline: Resume Analyzer, Skill Gap Analyzer, Career Strategist, Roadmap Planner, and Response Optimizer.
 
-CONTEXT — This student's REAL data (use ONLY this):
+CONTEXT — REAL DATA ONLY (Do not hallucinate):
 - Target Role: ${role}
 - Readiness Score: ${score}/100
+- Years Experience: ${experience_years}
 - Current Skills: ${skills.length > 0 ? skills.join(', ') : 'None provided'}
 - Critical Skill Gaps: ${gaps.length > 0 ? gaps.join(', ') : 'None identified'}
+- Projects: ${projects.length > 0 ? projects.map(p => p.title + ' (' + p.tools.join(',') + ')').join('; ') : 'No projects extracted'}
+- Conversation History: ${JSON.stringify(conversationHistory)}
 
-STRICT RULES:
-1. USE ONLY the student data above — never assume skills they don't have.
-2. DO NOT give generic advice like "improve your skills" or "keep learning."
-3. DO NOT hallucinate or suggest unrealistic paths.
-4. ALWAYS explain WHY something is a problem (e.g., "You are missing SQL, which is required in 90% of ${role} roles").
-5. ALWAYS give practical, real-world steps with specific resources or actions.
-6. Be direct, analytical, structured, and supportive.
-7. Reference their actual score and gaps in your reasoning.
+PIPELINE RULES:
+1. Resume Analyzer: Identify strengths and weaknesses from the exact data provided.
+2. Skill Gap Analyzer: Compare with ${role} industry standards. Pick a single high-priority missing skill.
+3. Career Strategist: Connect gaps to hiring logic. Explain WHY the user is struggling. Mention at least 1 existing skill and 1 gap.
+4. Roadmap Planner: Generate a realistic roadmap based ONLY on gaps. Include learning, practice, and project steps. Change based on the question.
+5. Response Optimizer: Combine into JSON. Ensure NO repetition of previous conversation history. Add human-like, analytical tone with deep insight.
 
 Student's question: "${question}"
 
-Respond with ONLY a valid JSON object (no markdown, no code fences, no explanation):
-
+Respond with ONLY a valid JSON object matching this strict schema. Never wrap in markdown code blocks, just raw JSON:
 {
-  "insight": "One sharp analytical sentence identifying the core issue for THIS specific student.",
-  "reason": "2-3 sentence data-backed explanation referencing their ${score}% score, specific gaps (${gaps.join(', ')}), and what ${role} roles actually require. Explain WHY they are struggling.",
-  "actions": [
-    "Specific action 1 tied to their #1 gap",
-    "Specific action 2 tied to their profile",
-    "Specific action 3 tied to career progress",
-    "Specific action 4 (resume/portfolio related)",
-    "Specific action 5 (networking/interview related)"
-  ],
+  "insight": "One sharp analytical sentence combining their core issue and your strategic insight.",
+  "reason": "Explain WHY they are struggling. Connect gaps to hiring logic and impact. Mention at least 1 real skill they have and 1 real gap they have.",
+  "impact": "What is the concrete impact of this gap on their job chances?",
+  "priority_skill": "The single most critical missing skill",
+  "actions": ["Specific action 1", "Specific action 2", "Specific action 3"],
   "roadmap": [
-    "Day 1-2 [Beginner | 4 hrs | ${gaps[0] || 'Core Skill'}]: Learning step...",
-    "Day 3-4 [Beginner | 4 hrs | ${gaps[0] || 'Core Skill'}]: Practice step...",
-    "Day 5-6 [Intermediate | 5 hrs | ${gaps[1] || gaps[0] || 'Core Skill'}]: Project step...",
-    "Day 7 [Intermediate | 3 hrs | ${gaps[1] || 'Secondary Skill'}]: Learning + practice...",
-    "Week 2 [Intermediate | 8 hrs | Project]: End-to-end project step...",
-    "Week 3 [Advanced | 4 hrs | Career]: Resume + applications step...",
-    "Week 4 [Advanced | 3 hrs | Interview]: Mock interview + feedback step..."
+    { "day": "Day 1-2", "task": "Learn fundamentals", "difficulty": "Beginner", "time": "4 hrs", "focus": "..." },
+    { "day": "Day 3-5", "task": "Practice", "difficulty": "Medium", "time": "5 hrs", "focus": "..." }
   ],
-  "today_task": "One specific, concrete task the student must complete TODAY (with time estimate)."
+  "smart_tip": "One 'what if I improve this skill?' strategic tip."
 }`;
 
     let aiResponse;
@@ -169,15 +168,23 @@ Respond with ONLY a valid JSON object (no markdown, no code fences, no explanati
     }
 
     // ── Validate and sanitize the response ──────────────────────────────────
-    const required = ['insight', 'reason', 'actions', 'roadmap', 'today_task'];
+    const required = ['insight', 'reason', 'impact', 'priority_skill', 'actions', 'roadmap', 'smart_tip'];
     const missing = required.filter(k => !aiResponse[k]);
     if (missing.length > 0) {
       console.warn(`[AI-MENTOR] Response missing fields: ${missing.join(', ')} — patching with fallback`);
-      const fallback = buildFallback(role, score, gaps, skills);
-      missing.forEach(k => { aiResponse[k] = fallback[k]; });
+      // Since fallback might not perfectly match the new schema entirely dynamically yet, ensure defaults:
+      aiResponse.impact = aiResponse.impact || `Missing skills heavily reduce ATS selection rates for ${role}.`;
+      aiResponse.priority_skill = aiResponse.priority_skill || gaps[0] || 'Core Skills';
+      aiResponse.smart_tip = aiResponse.smart_tip || `Mastering ${aiResponse.priority_skill} can increase callback rates by 40%.`;
+      aiResponse.actions = aiResponse.actions || ['Review your gaps', 'Update resume'];
+      aiResponse.roadmap = Array.isArray(aiResponse.roadmap) ? aiResponse.roadmap : [
+        { day: "Day 1", task: "Fundamentals", difficulty: "Easy", time: "2 hrs", focus: aiResponse.priority_skill }
+      ];
+      aiResponse.insight = aiResponse.insight || "Analyze your profile based on industry standards.";
+      aiResponse.reason = aiResponse.reason || "We identified gaps between your resume and market needs.";
     }
     if (!Array.isArray(aiResponse.actions)) aiResponse.actions = [aiResponse.actions || 'Review your skill gaps'];
-    if (!Array.isArray(aiResponse.roadmap)) aiResponse.roadmap = [aiResponse.roadmap || 'Start with fundamentals'];
+    if (!Array.isArray(aiResponse.roadmap)) aiResponse.roadmap = [{ day: "Day 1", task: "Start Fundamentals", difficulty: "Beginner", time: "2 hrs", focus: "Basics" }];
 
     return res.json({
       ...aiResponse,
