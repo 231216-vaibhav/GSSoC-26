@@ -15,8 +15,6 @@ NLP/test_resume.pdf
 NLP/test_resume.txt
 NLP/test_api.js
 
-# Google-auth temp files
-google-auth/
 
 # Editor
 .vscode/

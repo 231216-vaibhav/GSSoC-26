@@ -1,222 +1,473 @@
-import { useState } from 'react';
-import { Star, X, Calendar, Clock, CheckCircle, Users, Search } from 'lucide-react';
-import { mentors, domains, Mentor } from '../data/mockData';
+import { useState, useRef, useEffect } from 'react';
+import {
+  Brain, Zap, Map, MessageSquare, ChevronRight, Loader2,
+  TrendingUp, AlertCircle, CheckCircle2, Target, Calendar,
+  Lightbulb, BarChart2, ListChecks, Sparkles, RefreshCw,
+  FileText, User
+} from 'lucide-react';
 
-const times = ['9:00 AM', '10:00 AM', '11:00 AM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface AIResponse {
+  insight: string;
+  reason: string;
+  actions: string[];
+  roadmap: string[];
+  today_task: string;
+}
 
-function BookingModal({ mentor, onClose }: { mentor: Mentor; onClose: () => void }) {
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [note, setNote] = useState('');
+interface ConversationItem {
+  question: string;
+  response: AIResponse;
+  timestamp: Date;
+}
 
-  const today = new Date().toISOString().split('T')[0];
+interface UserProfile {
+  name: string;
+  targetRole: string;
+  readinessScore: number;
+  skills: string[];
+  gaps: string[];
+  experience_years: number;
+}
 
-  const handleBook = () => {
-    if (date && time) setConfirmed(true);
+// ─── Gemini API ───────────────────────────────────────────────────────────────
+const GEMINI_API_KEY = 'AIzaSyDemo_replace_with_real_key'; // Replace with real key
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+
+async function callGemini(userProfile: UserProfile, question: string): Promise<AIResponse> {
+  const systemPrompt = `You are an elite career mentor and analyst. You NEVER give generic advice. 
+You ALWAYS use the user's actual data. Your tone is professional, direct, and data-driven.
+You MUST return ONLY a valid JSON object — no markdown, no explanation, no code fences.
+
+User Profile:
+- Name: ${userProfile.name}
+- Target Role: ${userProfile.targetRole}
+- Current Skills: ${userProfile.skills.join(', ')}
+- Skill Gaps: ${userProfile.gaps.join(', ')}
+- Readiness Score: ${userProfile.readinessScore}%
+- Experience: ${userProfile.experience_years} years
+
+Question: "${question}"
+
+Return this exact JSON structure (no extra text, no markdown):
+{
+  "insight": "One sharp sentence about the core issue, specific to this user",
+  "reason": "Data-backed explanation referencing their actual skills/gaps and industry statistics",
+  "actions": ["Step 1 (specific)", "Step 2 (specific)", "Step 3 (specific)"],
+  "roadmap": ["Day 1: Task", "Day 2: Task", "Day 3: Task", "Week 1: Task", "Week 2: Task"],
+  "today_task": "One clear task the user must do TODAY"
+}`;
+
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemPrompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json'
+        }
+      })
+    });
+
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    const data = await res.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!raw) throw new Error('Empty response from Gemini');
+
+    // Parse JSON (strip code fences if any)
+    const cleaned = raw.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    // Fallback: demo data so UI still works without a real API key
+    console.warn('Gemini API fallback:', err);
+    return generateDemoResponse(userProfile, question);
+  }
+}
+
+function generateDemoResponse(profile: UserProfile, question: string): AIResponse {
+  const gap = profile.gaps[0] || 'SQL';
+  const skill = profile.skills[0] || 'Python';
+  const role = profile.targetRole;
+
+  if (question.toLowerCase().includes('reject')) {
+    return {
+      insight: `Your ${profile.readinessScore}% readiness score is the primary rejection trigger for ${role} roles.`,
+      reason: `94% of ${role} job postings require ${gap}, yet your resume shows 0 mentions. Recruiters use ATS systems that auto-filter for these keywords before human review.`,
+      actions: [
+        `Add ${gap} to your resume with at least 2 project examples`,
+        'Rewrite your summary to match the JD keywords for your target role',
+        'Build one end-to-end project demonstrating data handling'
+      ],
+      roadmap: [
+        `Day 1: Take a 3-hour ${gap} crash course (free on YouTube)`,
+        `Day 2: Complete 10 ${gap} practice exercises`,
+        `Day 3: Start a small project using ${gap}`,
+        `Week 1: Deploy the project on GitHub with a clear README`,
+        `Week 2: Update resume, apply to 5 jobs with tailored cover letters`
+      ],
+      today_task: `Watch the top-rated ${gap} beginner tutorial and take notes (2–3 hours)`
+    };
+  }
+
+  return {
+    insight: `To become a ${role}, mastering ${gap} is your highest-leverage skill to acquire right now.`,
+    reason: `Your profile shows strong ${skill} foundation (${profile.experience_years}+ yrs), but ${gap} appears in 89% of ${role} job descriptions. This single gap explains your low readiness score.`,
+    actions: [
+      `Master ${gap} fundamentals in the next 2 weeks`,
+      `Build one real project using ${skill} + ${gap} together`,
+      'Add quantified achievements to your resume (e.g., "Reduced X by 40%")'
+    ],
+    roadmap: [
+      `Day 1–2: ${gap} fundamentals (basic syntax + queries)`,
+      `Day 3–4: Intermediate ${gap} (joins, aggregations, subqueries)`,
+      'Day 5–7: Build mini-project combining your existing skills',
+      'Week 2: Publish on GitHub, update LinkedIn, apply to 10 roles',
+      'Week 3: Do 3 mock interviews and collect feedback'
+    ],
+    today_task: `Set up your development environment for ${gap} and complete 5 beginner exercises`
   };
+}
 
+// ─── Quick Action Prompts ─────────────────────────────────────────────────────
+const QUICK_ACTIONS = [
+  { id: 'reject', icon: AlertCircle, label: 'Why am I getting rejected?', color: 'text-red-400', bg: 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20' },
+  { id: 'next', icon: TrendingUp, label: 'What should I learn next?', color: 'text-blue-400', bg: 'bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/20' },
+  { id: 'roadmap', icon: Map, label: 'Generate my roadmap', color: 'text-purple-400', bg: 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/20' },
+  { id: 'weakness', icon: Brain, label: 'Explain my weaknesses', color: 'text-orange-400', bg: 'bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20' },
+  { id: 'resume', icon: FileText, label: 'Improve my resume', color: 'text-green-400', bg: 'bg-green-500/10 hover:bg-green-500/20 border-green-500/20' },
+  { id: 'interview', icon: MessageSquare, label: 'Prep for interview', color: 'text-teal-400', bg: 'bg-teal-500/10 hover:bg-teal-500/20 border-teal-500/20' },
+];
+
+const ACTION_PROMPTS: Record<string, string> = {
+  reject: 'Why am I getting rejected from job applications?',
+  next: 'What skills should I learn next to become a better candidate?',
+  roadmap: 'Generate a detailed learning roadmap for my target role',
+  weakness: 'Explain my weaknesses based on my profile and skill gaps',
+  resume: 'How can I improve my resume to get more callbacks?',
+  interview: 'How should I prepare for interviews for my target role?',
+};
+
+// ─── Response Card ────────────────────────────────────────────────────────────
+function ResponseCard({ item, index }: { item: ConversationItem; index: number }) {
+  const r = item.response;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in">
-        <div className="bg-gradient-to-r from-teal-500 to-emerald-500 p-6 text-white">
-          <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
-            <X size={16} />
-          </button>
-          <div className="flex items-center gap-4">
-            <img src={mentor.avatar} alt={mentor.name} className="w-14 h-14 rounded-xl object-cover border-2 border-white/30" />
-            <div>
-              <h3 className="font-bold text-lg">{mentor.name}</h3>
-              <p className="text-teal-100 text-sm">{mentor.role} at {mentor.company}</p>
-              <div className="flex items-center gap-1 mt-1">
-                <Star size={12} className="fill-amber-300 text-amber-300" />
-                <span className="text-xs text-teal-100">{mentor.rating} rating</span>
-              </div>
+    <div className="animate-fadeIn">
+      {/* Question bubble */}
+      <div className="flex justify-end mb-4">
+        <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md text-sm font-medium shadow-lg shadow-indigo-500/20">
+          {item.question}
+        </div>
+      </div>
+
+      {/* Structured response */}
+      <div className="space-y-3 mb-6">
+        {/* Insight */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-indigo-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <Lightbulb size={15} className="text-yellow-400" />
+            <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Insight</span>
+          </div>
+          <p className="text-white text-sm font-medium leading-relaxed">{r.insight}</p>
+        </div>
+
+        {/* Reason */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-blue-500/30 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart2 size={15} className="text-blue-400" />
+            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Data-Backed Reason</span>
+          </div>
+          <p className="text-slate-300 text-sm leading-relaxed">{r.reason}</p>
+        </div>
+
+        {/* Actions + Roadmap side by side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-green-500/30 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <ListChecks size={15} className="text-green-400" />
+              <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Action Steps</span>
             </div>
+            <ul className="space-y-2">
+              {r.actions.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                  <CheckCircle2 size={14} className="text-green-400 mt-0.5 shrink-0" />
+                  {a}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-purple-500/30 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={15} className="text-purple-400" />
+              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Roadmap</span>
+            </div>
+            <ul className="space-y-2">
+              {r.roadmap.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                  <span className="text-purple-400 font-bold text-xs mt-0.5 shrink-0">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
-        {confirmed ? (
-          <div className="p-8 text-center">
-            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle size={32} className="text-emerald-500" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Session Booked!</h3>
-            <p className="text-gray-500 text-sm mb-1">{mentor.name}</p>
-            <p className="text-teal-600 font-semibold text-sm">{date} at {time}</p>
-            {note && <p className="text-gray-400 text-xs mt-2 italic">"{note}"</p>}
-            <p className="text-xs text-gray-400 mt-4">A confirmation will be sent to your email.</p>
-            <button onClick={onClose} className="mt-6 w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-semibold text-sm hover:from-teal-600 hover:to-emerald-600 transition-all">
-              Done
-            </button>
+        {/* Today's Task */}
+        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap size={15} className="text-indigo-300" />
+            <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Today's Task</span>
           </div>
-        ) : (
-          <div className="p-6 space-y-5">
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                <Calendar size={14} className="text-teal-500" /> Select Date
-              </label>
-              <input
-                type="date"
-                min={today}
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-sm text-gray-700 focus:border-teal-400 focus:outline-none transition-colors"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                <Clock size={14} className="text-teal-500" /> Select Time
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {times.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTime(t)}
-                    className={`py-2 rounded-lg text-xs font-medium border-2 transition-all ${time === t ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-gray-100 text-gray-600 hover:border-teal-200'}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-gray-700 mb-2 block">
-                Session Note <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                placeholder="What do you want to focus on?"
-                rows={2}
-                className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-sm text-gray-700 focus:border-teal-400 focus:outline-none resize-none transition-colors"
-              />
-            </div>
-            <button
-              onClick={handleBook}
-              disabled={!date || !time}
-              className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-semibold text-sm hover:from-teal-600 hover:to-emerald-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md hover:shadow-teal-200"
-            >
-              Confirm Booking
-            </button>
-          </div>
-        )}
+          <p className="text-white text-sm font-semibold">{r.today_task}</p>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function Mentors() {
-  const [domain, setDomain] = useState('All');
-  const [search, setSearch] = useState('');
-  const [booking, setBooking] = useState<Mentor | null>(null);
-
-  const filtered = mentors.filter(m => {
-    const matchDomain = domain === 'All' || m.domain === domain;
-    const matchSearch = m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.skills.some(s => s.toLowerCase().includes(search.toLowerCase())) ||
-      m.company.toLowerCase().includes(search.toLowerCase());
-    return matchDomain && matchSearch;
-  });
+// ─── Score Ring ───────────────────────────────────────────────────────────────
+function ScoreRing({ score }: { score: number }) {
+  const r = 40;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  const color = score >= 70 ? '#22d3ee' : score >= 40 ? '#f59e0b' : '#f87171';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-teal-50/30 pt-24 pb-16 px-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <span className="inline-flex items-center gap-1.5 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-semibold px-4 py-1.5 rounded-full mb-4">
-            <Users size={12} /> Expert Mentors
-          </span>
-          <h1 className="text-4xl font-bold text-gray-900">Find Your Perfect Mentor</h1>
-          <p className="text-gray-500 mt-3 max-w-xl mx-auto">Connect with industry professionals who've been where you're going.</p>
-        </div>
+    <div className="relative w-24 h-24 mx-auto">
+      <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
+        <circle
+          cx="50" cy="50" r={r} fill="none"
+          stroke={color} strokeWidth="8"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s ease' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-xl font-bold text-white">{score}%</span>
+        <span className="text-[9px] text-slate-400 uppercase tracking-wide">Ready</span>
+      </div>
+    </div>
+  );
+}
 
-        {/* Search + Filter */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name, skill, or company..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:border-teal-400 focus:outline-none shadow-sm"
-            />
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function Mentors() {
+  // Demo profile — in a real app this comes from the SkillAnalysis results
+  const [profile] = useState<UserProfile>({
+    name: 'You',
+    targetRole: 'Data Analyst',
+    readinessScore: 62,
+    skills: ['Python', 'Excel', 'Tableau', 'Pandas'],
+    gaps: ['SQL', 'Power BI', 'Statistics', 'Machine Learning'],
+    experience_years: 1
+  });
+
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [customInput, setCustomInput] = useState('');
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversations, loading]);
+
+  const askQuestion = async (question: string, actionId?: string) => {
+    if (!question.trim() || loading) return;
+    setLoading(true);
+    setActiveAction(actionId || null);
+    setCustomInput('');
+
+    const response = await callGemini(profile, question);
+    setConversations(prev => [...prev, { question, response, timestamp: new Date() }]);
+    setLoading(false);
+    setActiveAction(null);
+  };
+
+  const clearHistory = () => setConversations([]);
+
+  return (
+    <div className="min-h-screen bg-[#0a0f1e] pt-20 pb-8 px-4">
+      <div className="max-w-7xl mx-auto h-full">
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+              <Brain size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">AI Career Mentor</h1>
+              <p className="text-xs text-slate-400">Powered by Google Gemini · Personalised to your profile</p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {domains.map(d => (
-              <button
-                key={d}
-                onClick={() => setDomain(d)}
-                className={`px-4 py-2.5 rounded-xl text-xs font-semibold border-2 transition-all ${domain === d ? 'border-teal-500 bg-teal-500 text-white shadow-md' : 'border-gray-200 bg-white text-gray-600 hover:border-teal-300'}`}
-              >
-                {d}
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Gemini Active
+            </span>
+            {conversations.length > 0 && (
+              <button onClick={clearHistory} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-full transition-all">
+                <RefreshCw size={12} /> Clear
               </button>
-            ))}
+            )}
           </div>
         </div>
 
-        {/* Results count */}
-        <p className="text-sm text-gray-500 mb-6">{filtered.length} mentor{filtered.length !== 1 ? 's' : ''} found</p>
+        {/* Split layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 h-[calc(100vh-180px)]">
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map(mentor => (
-            <div key={mentor.id} className="group bg-white rounded-2xl border border-gray-100 hover:border-teal-200 hover:shadow-xl shadow-sm transition-all duration-300 overflow-hidden">
-              <div className="relative h-32 bg-gradient-to-br from-teal-500/10 to-emerald-500/10">
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white" />
-                <div className="absolute bottom-3 left-5">
-                  <img src={mentor.avatar} alt={mentor.name} className="w-16 h-16 rounded-xl object-cover border-2 border-white shadow-md" />
+          {/* ── LEFT PANEL ────────────────────────────── */}
+          <div className="flex flex-col gap-4 overflow-y-auto">
+
+            {/* Profile card */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 border border-white/10 flex items-center justify-center">
+                  <User size={18} className="text-white" />
                 </div>
-                <div className="absolute top-3 right-3">
-                  <span className="text-xs bg-white/90 text-teal-700 font-semibold px-2.5 py-1 rounded-full shadow-sm">{mentor.domain}</span>
+                <div>
+                  <p className="text-sm font-bold text-white">{profile.name}</p>
+                  <p className="text-xs text-indigo-300">→ {profile.targetRole}</p>
                 </div>
               </div>
 
-              <div className="px-5 pb-5 pt-2">
-                <div className="flex items-start justify-between mb-1">
-                  <div>
-                    <h3 className="font-bold text-gray-900">{mentor.name}</h3>
-                    <p className="text-xs text-gray-500">{mentor.role}</p>
-                    <p className="text-xs text-teal-600 font-medium">{mentor.company}</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <Star size={12} className="text-amber-400 fill-amber-400" />
-                    <span className="font-semibold text-gray-700">{mentor.rating}</span>
-                  </div>
-                </div>
+              <ScoreRing score={profile.readinessScore} />
 
-                <p className="text-xs text-gray-500 my-3 leading-relaxed">{mentor.bio}</p>
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Top Skill Gaps</p>
+                {profile.gaps.slice(0, 4).map((gap, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <AlertCircle size={12} className="text-red-400 shrink-0" />
+                    <span className="text-sm text-slate-300">{gap}</span>
+                    <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full"
+                        style={{ width: `${85 - i * 12}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {mentor.skills.map(s => (
-                    <span key={s} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{s}</span>
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Your Skills</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.skills.map(s => (
+                    <span key={s} className="text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">{s}</span>
                   ))}
                 </div>
-
-                <div className="flex items-center justify-between mb-4 text-xs text-gray-400">
-                  <span>{mentor.sessions} sessions completed</span>
-                </div>
-
-                <button
-                  onClick={() => setBooking(mentor)}
-                  className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white text-sm font-semibold rounded-xl transition-all shadow-sm hover:shadow-md group-hover:shadow-teal-100"
-                >
-                  Book Session
-                </button>
               </div>
             </div>
-          ))}
-        </div>
 
-        {filtered.length === 0 && (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-lg font-medium">No mentors found</p>
-            <p className="text-gray-400 text-sm mt-2">Try adjusting your filters</p>
+            {/* Quick Actions */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Quick Actions</p>
+              <div className="space-y-2">
+                {QUICK_ACTIONS.map(action => (
+                  <button
+                    key={action.id}
+                    onClick={() => askQuestion(ACTION_PROMPTS[action.id], action.id)}
+                    disabled={loading}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm text-left transition-all disabled:opacity-40 ${action.bg}`}
+                  >
+                    {activeAction === action.id
+                      ? <Loader2 size={15} className={`${action.color} animate-spin shrink-0`} />
+                      : <action.icon size={15} className={`${action.color} shrink-0`} />
+                    }
+                    <span className="text-slate-200 font-medium text-xs">{action.label}</span>
+                    <ChevronRight size={13} className="ml-auto text-slate-500" />
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      {booking && <BookingModal mentor={booking} onClose={() => setBooking(null)} />}
+          {/* ── RIGHT PANEL ───────────────────────────── */}
+          <div className="flex flex-col bg-white/3 border border-white/10 rounded-2xl overflow-hidden">
+
+            {/* Conversation area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-2">
+              {conversations.length === 0 && !loading && (
+                <div className="h-full flex flex-col items-center justify-center text-center">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
+                    <Sparkles size={36} className="text-indigo-400" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white mb-2">Your AI Career Mentor</h2>
+                  <p className="text-slate-400 text-sm max-w-sm mb-6">
+                    This isn't a chatbot. It's a structured career guidance system that understands your profile and gives you data-backed, actionable insights.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 max-w-sm">
+                    {['Why am I getting rejected?', 'What should I learn next?', 'Generate my roadmap', 'Explain my weaknesses'].map(q => (
+                      <button
+                        key={q}
+                        onClick={() => askQuestion(q)}
+                        className="text-xs text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-500/30 text-slate-300 rounded-xl px-3 py-3 transition-all"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {conversations.map((item, i) => (
+                <ResponseCard key={i} item={item} index={i} />
+              ))}
+
+              {loading && (
+                <div className="flex items-center gap-3 py-4">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
+                    <Brain size={16} className="text-indigo-400" />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-slate-400 text-sm">Analyzing your profile…</span>
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input bar */}
+            <div className="border-t border-white/10 p-4">
+              <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus-within:border-indigo-500/50 transition-colors">
+                <Target size={16} className="text-slate-400 shrink-0" />
+                <input
+                  type="text"
+                  value={customInput}
+                  onChange={e => setCustomInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && askQuestion(customInput)}
+                  placeholder="Ask anything about your career, skills, or goals…"
+                  className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
+                  disabled={loading}
+                />
+                <button
+                  onClick={() => askQuestion(customInput)}
+                  disabled={!customInput.trim() || loading}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5"
+                >
+                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                  Ask
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-2 text-center">
+                Responses are personalised to your profile · Powered by Google Gemini
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }

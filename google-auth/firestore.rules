@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if the user is accessing their own data
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+    
+    match /auth_logs/{logId} {
+      allow read: if isOwner(resource.data.uid);
+      allow create: if isOwner(request.resource.data.uid);
+      allow update, delete: if false; // Logs should be immutable
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isOwner(resource.data.uid);
+      allow create: if isOwner(request.resource.data.uid);
+      allow update: if isOwner(resource.data.uid) && request.resource.data.uid == resource.data.uid;
+      allow delete: if false; // Keep session history
+    }
+  }
+}
