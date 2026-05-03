@@ -5,8 +5,12 @@ import {
   Lightbulb, BarChart2, ListChecks, Sparkles, RefreshCw,
   FileText, User, Code2
 } from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const REQUIRED_SKILLS = ["SQL", "Python", "Excel", "Power BI", "Statistics"];
+
+// ─── Gemini SDK Setup ─────────────────────────────────────────────────────────
+const genAI = new GoogleGenerativeAI("AIzaSyBABc-d4El7su9EyRM1G6SYu31qDST2WYo");
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AIResponse {
@@ -34,36 +38,65 @@ interface UserProfile {
   rawSkills: { name: string; occurrences: number }[];
 }
 
-// ─── Backend API call ─────────────────────────────────────────────────────────
-const BACKEND_URL = 'http://localhost:5000';
+// ─── Gemini AI Mentor (Direct SDK) ────────────────────────────────────────────
+async function getMentorResponse(userMessage: string, userData: UserProfile): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const prompt = `You are Meera, AI Career Mentor on SkillBridge.
+Student data:
+- Name: ${userData.name}
+- Target Role: ${userData.targetRole}
+- Readiness Score: ${userData.readinessScore}/100
+- Skills: ${userData.skills?.join(', ') || 'None'}
+- Top Gaps: ${userData.gaps?.join(', ') || 'None'}
+- Experience: ${userData.experience_years} years
+
+Rules: Under 80 words. Data-backed. End with ONE action for today.
+
+Student asks: ${userMessage}`;
+
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+}
 
 async function callAIMentor(userProfile: UserProfile, question: string): Promise<AIResponse> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/ai-mentor`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userData: {
-          role: userProfile.targetRole,
-          score: userProfile.readinessScore,
-          gaps: userProfile.gaps,
-          skills: userProfile.skills,
-          experience_years: userProfile.experience_years
-        },
-        question
-      })
-    });
+    // Call Gemini directly via SDK
+    const mentorText = await getMentorResponse(question, userProfile);
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Backend error: ${res.status}`);
+    // Try to parse as JSON first (if Gemini returns structured)
+    try {
+      const cleaned = mentorText.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed.insight && parsed.actions && parsed.roadmap) {
+        return parsed as AIResponse;
+      }
+    } catch {
+      // Not JSON — wrap the free-text response into our structured format
     }
 
-    const data = await res.json();
-    return data as AIResponse;
+    // Wrap Meera's free-text response into structured format
+    const gap = userProfile.gaps[0] || 'SQL';
+    return {
+      insight: mentorText.split('.')[0] + '.',
+      reason: mentorText,
+      actions: [
+        `Focus on mastering ${gap} — it's your #1 gap`,
+        `Build a portfolio project using ${gap}`,
+        `Update your resume with ${gap} keywords`
+      ],
+      roadmap: [
+        `Day 1-2 [Beginner | 4 hrs | ${gap}]: Learn ${gap} fundamentals`,
+        `Day 3-4 [Intermediate | 4 hrs | ${gap}]: Practice real-world exercises`,
+        `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Build a mini project`,
+        `Day 7 [Intermediate | 2 hrs | Portfolio]: Polish & push to GitHub`,
+        `Week 2 [Advanced | 3 hrs | Career]: Update resume, apply to 10 roles`
+      ],
+      today_task: `Start a ${gap} crash course and complete the first module (2-3 hours)`
+    };
   } catch (err) {
-    console.error('AI Mentor backend error:', err);
-    // Graceful fallback so UI still works if backend is down
+    console.error('Gemini SDK error:', err);
+    // Graceful fallback so UI still works if Gemini fails
     return generateDemoResponse(userProfile, question);
   }
 }
