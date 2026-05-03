@@ -105,6 +105,8 @@ export default function SkillAnalysis() {
 
       const data: ParsedResume = await res.json();
       setParsedData(data);
+      // Save globally for AI Mentor page
+      localStorage.setItem('parsedResume', JSON.stringify(data));
       setMode('result');
     } catch (err: any) {
       setParseError(err.message || 'Could not connect to the parser. Make sure the NLP server is running on port 5000.');

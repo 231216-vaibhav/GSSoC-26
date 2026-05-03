@@ -3,8 +3,10 @@ import {
   Brain, Zap, Map, MessageSquare, ChevronRight, Loader2,
   TrendingUp, AlertCircle, CheckCircle2, Target, Calendar,
   Lightbulb, BarChart2, ListChecks, Sparkles, RefreshCw,
-  FileText, User
+  FileText, User, Code2
 } from 'lucide-react';
+
+const REQUIRED_SKILLS = ["SQL", "Python", "Excel", "Power BI", "Statistics"];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AIResponse {
@@ -27,7 +29,9 @@ interface UserProfile {
   readinessScore: number;
   skills: string[];
   gaps: string[];
+  gapDetails: { name: string; isPartial: boolean }[];
   experience_years: number;
+  rawSkills: { name: string; occurrences: number }[];
 }
 
 // ─── Backend API call ─────────────────────────────────────────────────────────
@@ -127,6 +131,8 @@ const ACTION_PROMPTS: Record<string, string> = {
   resume: 'How can I improve my resume to get more callbacks?',
   interview: 'How should I prepare for interviews for my target role?',
 };
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 // ─── Response Card ────────────────────────────────────────────────────────────
 function ResponseCard({ item, index }: { item: ConversationItem; index: number }) {
@@ -236,16 +242,7 @@ function ScoreRing({ score }: { score: number }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Mentors() {
-  // Demo profile — in a real app this comes from the SkillAnalysis results
-  const [profile] = useState<UserProfile>({
-    name: 'You',
-    targetRole: 'Data Analyst',
-    readinessScore: 62,
-    skills: ['Python', 'Excel', 'Tableau', 'Pandas'],
-    gaps: ['SQL', 'Power BI', 'Statistics', 'Machine Learning'],
-    experience_years: 1
-  });
-
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [customInput, setCustomInput] = useState('');
@@ -253,11 +250,64 @@ export default function Mentors() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 1. Read parsed resume from localStorage
+    const saved = localStorage.getItem('parsedResume');
+    if (!saved) return;
+    
+    try {
+      const parsedData = JSON.parse(saved);
+      const extractedSkills = parsedData.skills || [];
+      
+      // 2. Normalize and extract unique skills
+      const userSkills = Array.from(new Set(extractedSkills.map((s: any) => s.name))) as string[];
+      
+      // 3. Gap Calculation
+      const gaps: string[] = [];
+      const gapDetails: { name: string; isPartial: boolean }[] = [];
+      let matchedCount = 0;
+      
+      REQUIRED_SKILLS.forEach(reqSkill => {
+        const lowerReq = reqSkill.toLowerCase();
+        // Check if required skill is in extracted skills
+        const foundSkill = extractedSkills.find((s: any) => s.name.toLowerCase() === lowerReq);
+        
+        if (!foundSkill) {
+          gaps.push(reqSkill);
+          gapDetails.push({ name: reqSkill, isPartial: false });
+        } else {
+          matchedCount++;
+          // Partial gap if low occurrences
+          if (foundSkill.occurrences < 2) {
+            gaps.push(reqSkill);
+            gapDetails.push({ name: reqSkill, isPartial: true });
+          }
+        }
+      });
+      
+      // 4. Score Calculation
+      const score = Math.round((matchedCount / REQUIRED_SKILLS.length) * 100);
+
+      setProfile({
+        name: 'You',
+        targetRole: 'Data Analyst',
+        readinessScore: score,
+        skills: userSkills,
+        gaps: gaps,
+        gapDetails: gapDetails,
+        experience_years: parsedData.experience_years || 0,
+        rawSkills: extractedSkills.map((s: any) => ({ name: s.name, occurrences: s.occurrences }))
+      });
+    } catch (e) {
+      console.error('Error parsing saved resume data:', e);
+    }
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversations, loading]);
 
   const askQuestion = async (question: string, actionId?: string) => {
-    if (!question.trim() || loading) return;
+    if (!question.trim() || loading || !profile) return;
     setLoading(true);
     setActiveAction(actionId || null);
     setCustomInput('');
@@ -269,6 +319,23 @@ export default function Mentors() {
   };
 
   const clearHistory = () => setConversations([]);
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-slate-50 pt-32 pb-8 px-4 font-sans flex flex-col items-center justify-center">
+        <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6 border border-emerald-100">
+           <FileText size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Upload your resume to see your skill analysis</h2>
+        <p className="text-slate-500 mb-6 text-center max-w-md">
+          The AI Mentor needs your resume data to calculate your readiness score and generate personalized career advice.
+        </p>
+        <button onClick={() => window.location.href = '/skill-analysis'} className="bg-[#10b981] hover:bg-[#059669] text-white px-6 py-3 rounded-xl font-medium shadow-sm transition-colors">
+          Upload Resume
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pt-20 pb-8 px-4 font-sans">
@@ -320,26 +387,36 @@ export default function Mentors() {
 
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Skill Gaps</p>
-                {profile.gaps.slice(0, 4).map((gap, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <AlertCircle size={12} className="text-emerald-500 shrink-0" />
-                    <span className="text-sm text-slate-700">{gap}</span>
-                    <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full"
-                        style={{ width: `${85 - i * 12}%` }}
-                      />
+                {(!profile.gapDetails || profile.gapDetails.length === 0) ? (
+                  <p className="text-sm text-emerald-600 font-medium">You have all the required skills!</p>
+                ) : (
+                  profile.gapDetails.slice(0, 4).map((gap, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <AlertCircle size={12} className={gap.isPartial ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
+                      <span className="text-sm text-slate-700 flex-1 flex items-center justify-between">
+                        {gap.name}
+                        {gap.isPartial && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-sm">Low Exp</span>}
+                      </span>
+                      <div className="w-20 h-1 rounded-full bg-slate-100 overflow-hidden shrink-0">
+                        <div
+                          className={`h-full rounded-full ${gap.isPartial ? 'bg-amber-400 w-[30%]' : 'bg-red-400 w-[0%]'}`}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Your Skills</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {profile.skills.map(s => (
-                    <span key={s} className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full">{s}</span>
-                  ))}
+                  {(!profile.skills || profile.skills.length === 0) ? (
+                    <span className="text-xs text-slate-400">No skills detected.</span>
+                  ) : (
+                    profile.skills.map(s => (
+                      <span key={s} className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full">{s}</span>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -363,6 +440,26 @@ export default function Mentors() {
                     <ChevronRight size={13} className="ml-auto text-slate-400" />
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Debug View */}
+            <div className="bg-slate-100 border border-slate-200 rounded-2xl p-4 mt-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Code2 size={14} className="text-slate-500" />
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Debug: Raw Skills</p>
+              </div>
+              <div className="max-h-40 overflow-y-auto pr-2 space-y-1">
+                {(!profile.rawSkills || profile.rawSkills.length === 0) ? (
+                  <p className="text-xs text-slate-400">No skills found by parser.</p>
+                ) : (
+                  profile.rawSkills.map((s, i) => (
+                    <div key={i} className="flex justify-between items-center text-xs">
+                      <span className="text-slate-700 font-medium">{s.name}</span>
+                      <span className="text-slate-500 bg-slate-200 px-1.5 rounded">x{s.occurrences}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
