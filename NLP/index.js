@@ -113,8 +113,8 @@ app.post('/api/ai-mentor', async (req, res) => {
 
     console.log(`\n[AI-MENTOR] Role:${role} | Score:${score} | Skills:${skills.join(',')} | Gaps:${gaps.join(',')} | Q:"${question.slice(0, 60)}"`);
 
-    // ── Build the system prompt (CHATGPT-LIKE Conversational Mode) ──────────
-    const prompt = `You are a highly intelligent Career Mentor AI. You speak in a fluid, natural, and highly insightful conversational tone, similar to ChatGPT, but you have deep knowledge of the user's specific career data.
+    // ── Build the system prompt (STRUCTURED JSON SYSTEM) ──────────
+    const prompt = `You are a highly intelligent Career Mentor AI. You provide data-backed, practical advice based on the user's real resume data.
 
 CONTEXT — REAL DATA ONLY (Do not hallucinate):
 - Target Role: ${role}
@@ -126,17 +126,25 @@ CONTEXT — REAL DATA ONLY (Do not hallucinate):
 - Conversation History: ${JSON.stringify(conversationHistory)}
 
 RULES:
-1. Speak naturally to the user. Do not be overly robotic. 
-2. Write your response using clean Markdown formatting (bolding, bullet points, headers if necessary).
-3. Directly answer the user's question, using their resume context to provide highly personalized advice.
-4. If they ask about gaps or learning, recommend specific paths or projects based on their missing skills.
-5. Do not repeat things you already told them in the conversation history.
+1. Use real user data (skills, gaps, score).
+2. No hallucination. Never assume skills they don't have.
+3. No generic advice.
+4. Always return structured JSON.
+5. Provide a practical real-world roadmap.
 
 Student's question: "${question}"
 
 Respond with ONLY a valid JSON object matching this strict schema:
 {
-  "answer": "Your full, beautifully formatted Markdown response here. Speak directly to the user."
+  "insight": "One sharp analytical sentence combining their core issue and your strategic insight.",
+  "reason": "Explain WHY they are struggling. Connect gaps to hiring logic.",
+  "actions": ["Specific action 1", "Specific action 2", "Specific action 3"],
+  "roadmap": [
+    "Day 1-2: Learn fundamentals of missing skill",
+    "Day 3-5: Practice with a small project"
+  ],
+  "today_task": "One specific, concrete task the student must complete TODAY.",
+  "chat_summary": "Short explanation or supportive conversational summary of your advice."
 }`;
 
     let aiResponse;
@@ -158,11 +166,16 @@ Respond with ONLY a valid JSON object matching this strict schema:
     }
 
     // ── Validate and sanitize the response ──────────────────────────────────
-    const required = ['answer'];
+    const required = ['insight', 'reason', 'actions', 'roadmap', 'today_task', 'chat_summary'];
     const missing = required.filter(k => !aiResponse[k]);
     if (missing.length > 0) {
       console.warn(`[AI-MENTOR] Response missing fields: ${missing.join(', ')} — patching with fallback`);
-      aiResponse.answer = "I'm having trouble analyzing your profile completely right now, but I notice you need to work on " + (gaps[0] || 'core skills') + " for " + role + " roles. Try asking me a specific question!";
+      aiResponse.insight = aiResponse.insight || "Unable to analyze completely right now.";
+      aiResponse.reason = aiResponse.reason || "Temporary issue with full analysis.";
+      aiResponse.actions = Array.isArray(aiResponse.actions) && aiResponse.actions.length > 0 ? aiResponse.actions : ["Please try again"];
+      aiResponse.roadmap = Array.isArray(aiResponse.roadmap) && aiResponse.roadmap.length > 0 ? aiResponse.roadmap : ["Check back later"];
+      aiResponse.today_task = aiResponse.today_task || "Review your skills";
+      aiResponse.chat_summary = aiResponse.chat_summary || "Please try again.";
     }
 
     return res.json({
@@ -181,7 +194,12 @@ Respond with ONLY a valid JSON object matching this strict schema:
   } catch (err) {
     console.error('[AI-MENTOR ERROR]', err.message);
     return res.status(500).json({
-      answer: 'AI service temporarily unavailable. Please try again in a moment.',
+      insight: 'Unable to analyze',
+      reason: 'Temporary issue',
+      actions: [],
+      roadmap: [],
+      today_task: '',
+      chat_summary: 'Please try again',
       meta: { error: true, message: err.message, timestamp: Date.now() }
     });
   }

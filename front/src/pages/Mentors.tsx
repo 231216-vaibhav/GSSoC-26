@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
 import {
   Brain, Zap, Map, MessageSquare, ChevronRight, Loader2,
   TrendingUp, AlertCircle, CheckCircle2, Target, Calendar,
@@ -20,7 +19,13 @@ const BACKEND_URL = 'http://localhost:5000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AIResponse {
-  answer: string;
+  insight: string;
+  reason: string;
+  chat_summary: string;
+  priority_skill: string;
+  actions: string[];
+  roadmap: string[];
+  today_task: string;
 }
 
 interface ConversationItem {
@@ -59,7 +64,7 @@ async function callAIMentor(userProfile: UserProfile, question: string, history:
         question,
         conversationHistory: history.slice(-5).map(h => ({ 
           user: h.question, 
-          ai: h.response.answer 
+          ai_insight: h.response.insight 
         }))
       })
     });
@@ -71,7 +76,13 @@ async function callAIMentor(userProfile: UserProfile, question: string, history:
 
     const data = await res.json();
     return {
-      answer: data.answer
+      insight: data.insight,
+      reason: data.reason,
+      chat_summary: data.chat_summary,
+      priority_skill: userProfile.gaps[0] || 'Core Skills',
+      actions: data.actions || [],
+      roadmap: data.roadmap || [],
+      today_task: data.today_task
     };
   } catch (err) {
     console.error('AI Mentor error:', err);
@@ -84,7 +95,18 @@ function generateFallback(profile: UserProfile, question: string): AIResponse {
   const role = profile.targetRole;
 
   return {
-    answer: `**I am currently operating in fallback mode** because the AI service is unreachable.\n\nHowever, I can tell you that for **${role}** roles, you are missing **${gap}**. Try focusing on that first!`
+    insight: `Unable to analyze profile right now.`,
+    reason: `Temporary issue. We noticed you are targeting ${role} roles.`,
+    chat_summary: `Please try again.`,
+    priority_skill: gap,
+    actions: [
+      `Review your ${gap} skills`,
+      `Try asking your question again in a few moments.`
+    ],
+    roadmap: [
+      `Day 1: Brush up on ${gap}`
+    ],
+    today_task: "Check your network or API keys."
   };
 }
 
@@ -110,33 +132,101 @@ const ACTION_PROMPTS: Record<string, string> = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // ─── Response Card ────────────────────────────────────────────────────────────
-function ResponseCard({ item }: { item: ConversationItem }) {
+function ResponseCard({ item, index }: { item: ConversationItem; index: number }) {
   const r = item.response;
   return (
     <div className="animate-fadeIn">
-      {/* User Message */}
-      <div className="flex justify-end mb-6">
-        <div className="bg-emerald-600 text-white rounded-2xl rounded-tr-sm py-3 px-5 max-w-[80%] shadow-md font-medium">
+      {/* Question bubble */}
+      <div className="flex justify-end mb-4">
+        <div className="bg-[#10b981] text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md text-sm font-medium shadow-sm">
           {item.question}
         </div>
       </div>
 
-      {/* AI Response Card */}
-      <div className="flex mb-8">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shrink-0 mr-4 shadow-md mt-1">
-          <Brain size={20} className="text-white" />
+      {/* Structured response */}
+      <div className="space-y-3 mb-6">
+        {/* Insight & Impact */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Insight</span>
+            </div>
+            <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.insight}</p>
+          </div>
+          
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle size={15} className="text-amber-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Impact</span>
+            </div>
+            <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.chat_summary}</p>
+          </div>
         </div>
-        
-        <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm p-6 max-w-[90%] shadow-sm w-full">
-          <div className="prose prose-teal prose-sm sm:prose-base max-w-none text-slate-700">
-            <ReactMarkdown>{r.answer || 'No response generated.'}</ReactMarkdown>
+
+        {/* Reason */}
+        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+          <div className="flex items-center gap-2 mb-2">
+            <BarChart2 size={15} className="text-emerald-500" />
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Data-Backed Reason</span>
+          </div>
+          <p className="text-slate-600 text-sm leading-relaxed">{r.reason}</p>
+        </div>
+
+        {/* Actions + Roadmap side by side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <ListChecks size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Action Steps</span>
+            </div>
+            <ul className="space-y-2">
+              {r.actions.map((a, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                  <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                  {a}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Roadmap</span>
+            </div>
+            <ul className="space-y-3">
+              {r.roadmap.map((step, i) => (
+                <li key={i} className="flex flex-col gap-1 text-sm text-slate-600 border-l-2 border-emerald-200 pl-3 ml-1">
+                  <span className="font-medium text-slate-800">{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Smart Tip & Priority Skill */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap size={15} className="text-emerald-600" />
+              <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Smart Tip</span>
+            </div>
+            <p className="text-emerald-950 text-sm font-medium">{r.today_task}</p>
+          </div>
+          
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={15} className="text-amber-600" />
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Priority Skill</span>
+            </div>
+            <p className="text-amber-950 text-sm font-bold text-lg">{r.priority_skill}</p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
 
 // ─── Score Ring ───────────────────────────────────────────────────────────────
 function ScoreRing({ score }: { score: number }) {
@@ -425,7 +515,7 @@ export default function Mentors() {
               )}
 
               {conversations.map((item, i) => (
-                <ResponseCard key={i} item={item} />
+                <ResponseCard key={i} item={item} index={i} />
               ))}
 
               {loading && (
