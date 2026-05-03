@@ -13,7 +13,7 @@ app.use(express.json());
 // ── Gemini REST (direct v1 endpoint — avoids SDK v1beta issues) ────────────────
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 // Try these models in order
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-pro'];
 
 async function callGeminiREST(promptText) {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
@@ -430,11 +430,11 @@ function buildFallback(role, score, gaps) {
       `Update your resume with ${gap}-related keywords and quantified achievements`
     ],
     roadmap: [
-      `Day 1: Start ${gap} fundamentals — 3-hour crash course (YouTube or Coursera free tier)`,
-      `Day 2: Complete 10 practice exercises to solidify core ${gap} concepts`,
-      `Day 3: Begin a mini project combining ${gap} with your existing skills`,
-      `Week 1: Finish and publish the project on GitHub with a detailed README`,
-      `Week 2: Update resume, apply to 10 targeted ${role} roles with tailored cover letters`
+      `Day 1-2 [Beginner | 3 hrs | ${gap}]: Start ${gap} fundamentals with a crash course (YouTube or Coursera free tier)`,
+      `Day 3-4 [Beginner | 4 hrs | ${gap}]: Complete 10 practice exercises to solidify core ${gap} concepts`,
+      `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Begin a mini project combining ${gap} with your existing skills`,
+      `Day 7 [Intermediate | 2 hrs | ${gap}]: Finish and publish the project on GitHub with a detailed README`,
+      `Week 2 [Advanced | 3 hrs | Career]: Update resume, apply to 10 targeted ${role} roles with tailored cover letters`
     ],
     today_task: `Set up your ${gap} learning environment and complete the first module of a structured course (target: 2-3 hours)`
   };
@@ -460,32 +460,48 @@ app.post('/api/ai-mentor', async (req, res) => {
 
     // ── Build dynamic prompt ────────────────────────────────────────────────
     const prompt = `
-You are an elite career mentor and analyst. You NEVER give generic advice.
-You ALWAYS use the user's actual data. Your tone is professional, direct, and data-driven.
+You are an elite career analyst and mentor. You NEVER give generic advice.
+You act as a Decision Support System and Skill Gap Evaluator.
 
 User Profile:
 - Target Role: ${role}
 - Readiness Score: ${score}%
 - Critical Skill Gaps: ${gaps.length > 0 ? gaps.join(', ') : 'None identified'}
+- Current Skills: ${userData.skills?.join(', ') || 'Not provided'}
 
 Question from user: "${question}"
 
-Instructions:
-1. Reference the user's actual skill gaps and score — never be generic
-2. Back every claim with industry data or logic
-3. Give exactly 3 action steps
-4. Give exactly 5 roadmap items (Day 1, Day 2, Day 3, Week 1, Week 2)
-5. Give one specific task for TODAY
-6. Be analytical, not conversational
+Core Rules:
+1. USE ONLY the user data provided. Consider their skill gaps, current skill level, and target role requirements.
+2. DO NOT hallucinate or suggest unrealistic paths.
+3. ALWAYS give practical, real-world steps.
+4. Explain WHY the user is lacking (e.g., "You are missing SQL, which is required in 90% of Data Analyst roles...").
+5. Be direct, analytical, and structured. No fluff.
+
+Roadmap Requirements:
+- Must be realistic and beginner-to-intermediate friendly.
+- Each step MUST include a Learning step, a Practice step, or a Project step.
+- BONUS: Include [Difficulty Level], [Time Estimate], and [Priority Skill] in each roadmap step string.
+  Example format: "Day 1-2 [Beginner | 4 hrs | SQL]: Learn SQL basics and practice JOIN queries."
 
 Respond ONLY with a valid JSON object. No markdown, no explanation, no code fences.
 
 {
-  "insight": "One sharp sentence identifying the core issue, specific to this user",
-  "reason": "Data-backed explanation referencing their role, score, and specific gaps",
-  "actions": ["Action 1", "Action 2", "Action 3"],
-  "roadmap": ["Day 1: ...", "Day 2: ...", "Day 3: ...", "Week 1: ...", "Week 2: ..."],
-  "today_task": "One concrete task the user must do TODAY"
+  "insight": "One sharp, analytical sentence identifying the core issue, specific to this user and role.",
+  "reason": "Data-backed explanation referencing their role, score, and specific gaps. Explain WHY they are getting rejected or what they lack.",
+  "actions": [
+    "Action 1 (highly specific to their gaps)",
+    "Action 2",
+    "Action 3"
+  ],
+  "roadmap": [
+    "Day 1-2 [Difficulty | Time | Priority Skill]: ...",
+    "Day 3-4 [Difficulty | Time | Priority Skill]: ...",
+    "Day 5-6 [Difficulty | Time | Priority Skill]: ...",
+    "Day 7 [Difficulty | Time | Priority Skill]: ...",
+    "Week 2 [Difficulty | Time | Priority Skill]: ..."
+  ],
+  "today_task": "One concrete, highly actionable task the user must complete TODAY."
 }`;
 
     let aiResponse;
