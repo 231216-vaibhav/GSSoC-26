@@ -113,9 +113,8 @@ app.post('/api/ai-mentor', async (req, res) => {
 
     console.log(`\n[AI-MENTOR] Role:${role} | Score:${score} | Skills:${skills.join(',')} | Gaps:${gaps.join(',')} | Q:"${question.slice(0, 60)}"`);
 
-    // ── Build the system prompt (MULTI-AGENT PIPELINE) ─────────────────────
-    const prompt = `You are a Multi-Agent AI System acting as a competition-grade Career Mentor.
-You simulate 5 internal agents in a single pipeline: Resume Analyzer, Skill Gap Analyzer, Career Strategist, Roadmap Planner, and Response Optimizer.
+    // ── Build the system prompt (CHATGPT-LIKE Conversational Mode) ──────────
+    const prompt = `You are a highly intelligent Career Mentor AI. You speak in a fluid, natural, and highly insightful conversational tone, similar to ChatGPT, but you have deep knowledge of the user's specific career data.
 
 CONTEXT — REAL DATA ONLY (Do not hallucinate):
 - Target Role: ${role}
@@ -126,27 +125,18 @@ CONTEXT — REAL DATA ONLY (Do not hallucinate):
 - Projects: ${projects.length > 0 ? projects.map(p => p.title + ' (' + p.tools.join(',') + ')').join('; ') : 'No projects extracted'}
 - Conversation History: ${JSON.stringify(conversationHistory)}
 
-PIPELINE RULES:
-1. Resume Analyzer: Identify strengths and weaknesses from the exact data provided.
-2. Skill Gap Analyzer: Compare with ${role} industry standards. Pick a single high-priority missing skill.
-3. Career Strategist: Connect gaps to hiring logic. Explain WHY the user is struggling. Mention at least 1 existing skill and 1 gap.
-4. Roadmap Planner: Generate a realistic roadmap based ONLY on gaps. Include learning, practice, and project steps. Change based on the question.
-5. Response Optimizer: Combine into JSON. Ensure NO repetition of previous conversation history. Add human-like, analytical tone with deep insight.
+RULES:
+1. Speak naturally to the user. Do not be overly robotic. 
+2. Write your response using clean Markdown formatting (bolding, bullet points, headers if necessary).
+3. Directly answer the user's question, using their resume context to provide highly personalized advice.
+4. If they ask about gaps or learning, recommend specific paths or projects based on their missing skills.
+5. Do not repeat things you already told them in the conversation history.
 
 Student's question: "${question}"
 
-Respond with ONLY a valid JSON object matching this strict schema. Never wrap in markdown code blocks, just raw JSON:
+Respond with ONLY a valid JSON object matching this strict schema:
 {
-  "insight": "One sharp analytical sentence combining their core issue and your strategic insight.",
-  "reason": "Explain WHY they are struggling. Connect gaps to hiring logic and impact. Mention at least 1 real skill they have and 1 real gap they have.",
-  "impact": "What is the concrete impact of this gap on their job chances?",
-  "priority_skill": "The single most critical missing skill",
-  "actions": ["Specific action 1", "Specific action 2", "Specific action 3"],
-  "roadmap": [
-    { "day": "Day 1-2", "task": "Learn fundamentals", "difficulty": "Beginner", "time": "4 hrs", "focus": "..." },
-    { "day": "Day 3-5", "task": "Practice", "difficulty": "Medium", "time": "5 hrs", "focus": "..." }
-  ],
-  "smart_tip": "One 'what if I improve this skill?' strategic tip."
+  "answer": "Your full, beautifully formatted Markdown response here. Speak directly to the user."
 }`;
 
     let aiResponse;
@@ -168,23 +158,12 @@ Respond with ONLY a valid JSON object matching this strict schema. Never wrap in
     }
 
     // ── Validate and sanitize the response ──────────────────────────────────
-    const required = ['insight', 'reason', 'impact', 'priority_skill', 'actions', 'roadmap', 'smart_tip'];
+    const required = ['answer'];
     const missing = required.filter(k => !aiResponse[k]);
     if (missing.length > 0) {
       console.warn(`[AI-MENTOR] Response missing fields: ${missing.join(', ')} — patching with fallback`);
-      // Since fallback might not perfectly match the new schema entirely dynamically yet, ensure defaults:
-      aiResponse.impact = aiResponse.impact || `Missing skills heavily reduce ATS selection rates for ${role}.`;
-      aiResponse.priority_skill = aiResponse.priority_skill || gaps[0] || 'Core Skills';
-      aiResponse.smart_tip = aiResponse.smart_tip || `Mastering ${aiResponse.priority_skill} can increase callback rates by 40%.`;
-      aiResponse.actions = aiResponse.actions || ['Review your gaps', 'Update resume'];
-      aiResponse.roadmap = Array.isArray(aiResponse.roadmap) ? aiResponse.roadmap : [
-        { day: "Day 1", task: "Fundamentals", difficulty: "Easy", time: "2 hrs", focus: aiResponse.priority_skill }
-      ];
-      aiResponse.insight = aiResponse.insight || "Analyze your profile based on industry standards.";
-      aiResponse.reason = aiResponse.reason || "We identified gaps between your resume and market needs.";
+      aiResponse.answer = "I'm having trouble analyzing your profile completely right now, but I notice you need to work on " + (gaps[0] || 'core skills') + " for " + role + " roles. Try asking me a specific question!";
     }
-    if (!Array.isArray(aiResponse.actions)) aiResponse.actions = [aiResponse.actions || 'Review your skill gaps'];
-    if (!Array.isArray(aiResponse.roadmap)) aiResponse.roadmap = [{ day: "Day 1", task: "Start Fundamentals", difficulty: "Beginner", time: "2 hrs", focus: "Basics" }];
 
     return res.json({
       ...aiResponse,
@@ -202,11 +181,7 @@ Respond with ONLY a valid JSON object matching this strict schema. Never wrap in
   } catch (err) {
     console.error('[AI-MENTOR ERROR]', err.message);
     return res.status(500).json({
-      insight: 'Unable to analyze right now',
-      reason: 'AI service temporarily unavailable. Please try again in a moment.',
-      actions: [],
-      roadmap: [],
-      today_task: '',
+      answer: 'AI service temporarily unavailable. Please try again in a moment.',
       meta: { error: true, message: err.message, timestamp: Date.now() }
     });
   }
