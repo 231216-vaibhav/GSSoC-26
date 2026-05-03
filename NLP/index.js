@@ -12,49 +12,64 @@ app.use(express.json());
 
 // ── Gemini SDK Setup (server-side only — key NEVER exposed to frontend) ────────
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-const genAI = GEMINI_KEY ? new GoogleGenerativeAI(GEMINI_KEY) : null;
+
+// Collect all available Gemini API keys from environment
+const GEMINI_KEYS = [
+  process.env.GEMINI_API_KEY,
+  process.env.GEMINI_API_KEY_2,
+  'AIzaSyDwISjIPyHZsPEWanLFp7zpFpOzIK8XaKw' // User provided fallback key
+].filter(Boolean);
 
 // Models to try in order — gemini-1.5-flash first per requirements
 const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
 
 async function callGeminiSDK(promptText) {
-  if (!genAI) throw new Error('GEMINI_API_KEY not set');
+  if (GEMINI_KEYS.length === 0) throw new Error('No GEMINI_API_KEY set');
 
-  for (const modelName of GEMINI_MODELS) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
-      });
-      const result = await model.generateContent(promptText);
-      const raw = result.response.text();
-      if (!raw) throw new Error('Empty response');
-
-      let parsed;
+  for (const apiKey of GEMINI_KEYS) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const keyHint = apiKey.slice(-4);
+    
+    for (const modelName of GEMINI_MODELS) {
       try {
-        // First try: Clean basic markdown and parse
-        const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-        parsed = JSON.parse(cleaned);
-      } catch (err) {
-        // Second try: Regex extraction if there's extra text around it
-        console.warn(`[GEMINI-SDK] ${modelName} initial parse failed, trying regex extraction...`);
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('Regex extraction failed to find JSON structure.');
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+        });
+        const result = await model.generateContent(promptText);
+        const raw = result.response.text();
+        if (!raw) throw new Error('Empty response');
+
+        let parsed;
+        try {
+          // First try: Clean basic markdown and parse
+          const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+          parsed = JSON.parse(cleaned);
+        } catch (err) {
+          // Second try: Regex extraction if there's extra text around it
+          console.warn(`[GEMINI-SDK] ${modelName} initial parse failed, trying regex extraction...`);
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('Regex extraction failed to find JSON structure.');
+          }
+        }
+
+        console.log(`[GEMINI-SDK] ✅ Success via ${modelName} (Key ...${keyHint})`);
+        return { parsed, model: modelName };
+      } catch (e) {
+        const msg = e?.message || 'unknown';
+        console.warn(`[GEMINI-SDK] ❌ ${modelName} (Key ...${keyHint}) failed: ${msg.slice(0, 120)}`);
+        
+        // If it's an API key issue or quota issue, break inner loop to try next key immediately
+        if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('key') || msg.toLowerCase().includes('429')) {
+          break; 
         }
       }
-
-      console.log(`[GEMINI-SDK] ✅ Success via ${modelName}`);
-      return { parsed, model: modelName };
-    } catch (e) {
-      const msg = e?.message || 'unknown';
-      console.warn(`[GEMINI-SDK] ❌ ${modelName} failed: ${msg.slice(0, 120)}`);
     }
   }
-  throw new Error('All Gemini models exhausted');
+  throw new Error('All Gemini keys and models exhausted');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -641,5 +656,5 @@ app.listen(PORT, () => {
   console.log(`   GET  http://localhost:${PORT}/`);
   console.log(`   POST http://localhost:${PORT}/api/resume/parse`);
   console.log(`   POST http://localhost:${PORT}/api/ai-mentor`);
-  console.log(`   Gemini SDK: ${genAI ? '🟢 active (server-side)' : '🔴 fallback mode'}\n`);
+  console.log(`   Gemini SDK: ${GEMINI_KEYS.length > 0 ? `🟢 active (${GEMINI_KEYS.length} keys loaded)` : '🔴 fallback mode'}\n`);
 });
