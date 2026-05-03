@@ -13,7 +13,7 @@ app.use(express.json());
 // ── Gemini REST (direct v1 endpoint — avoids SDK v1beta issues) ────────────────
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 // Try these models in order
-const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-pro'];
+const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
 
 async function callGeminiREST(promptText) {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
