@@ -3,14 +3,13 @@ import {
   Brain, Zap, Map, MessageSquare, ChevronRight, Loader2,
   TrendingUp, AlertCircle, CheckCircle2, Target, Calendar,
   Lightbulb, BarChart2, ListChecks, Sparkles, RefreshCw,
-  FileText, User, Code2
+  FileText, User, Code2, ShieldCheck
 } from 'lucide-react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const REQUIRED_SKILLS = ["SQL", "Python", "Excel", "Power BI", "Statistics"];
 
-// ─── Gemini SDK Setup ─────────────────────────────────────────────────────────
-const genAI = new GoogleGenerativeAI("AIzaSyBABc-d4El7su9EyRM1G6SYu31qDST2WYo");
+// ─── Backend API (Gemini key stays server-side) ───────────────────────────────
+const BACKEND_URL = 'http://localhost:5000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AIResponse {
@@ -38,111 +37,71 @@ interface UserProfile {
   rawSkills: { name: string; occurrences: number }[];
 }
 
-// ─── Gemini AI Mentor (Direct SDK) ────────────────────────────────────────────
-async function getMentorResponse(userMessage: string, userData: UserProfile): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  const prompt = `You are Meera, AI Career Mentor on SkillBridge.
-Student data:
-- Name: ${userData.name}
-- Target Role: ${userData.targetRole}
-- Readiness Score: ${userData.readinessScore}/100
-- Skills: ${userData.skills?.join(', ') || 'None'}
-- Top Gaps: ${userData.gaps?.join(', ') || 'None'}
-- Experience: ${userData.experience_years} years
-
-Rules: Under 80 words. Data-backed. End with ONE action for today.
-
-Student asks: ${userMessage}`;
-
-  const result = await model.generateContent(prompt);
-  return result.response.text();
-}
-
+// ─── Secure backend call — API key NEVER leaves the server ────────────────────
 async function callAIMentor(userProfile: UserProfile, question: string): Promise<AIResponse> {
   try {
-    // Call Gemini directly via SDK
-    const mentorText = await getMentorResponse(question, userProfile);
+    const res = await fetch(`${BACKEND_URL}/api/ai-mentor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userData: {
+          role: userProfile.targetRole,
+          score: userProfile.readinessScore,
+          skills: userProfile.skills,
+          gaps: userProfile.gaps,
+          experience_years: userProfile.experience_years
+        },
+        question
+      })
+    });
 
-    // Try to parse as JSON first (if Gemini returns structured)
-    try {
-      const cleaned = mentorText.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      if (parsed.insight && parsed.actions && parsed.roadmap) {
-        return parsed as AIResponse;
-      }
-    } catch {
-      // Not JSON — wrap the free-text response into our structured format
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Backend error: ${res.status}`);
     }
 
-    // Wrap Meera's free-text response into structured format
-    const gap = userProfile.gaps[0] || 'SQL';
+    const data = await res.json();
+    // Return only the structured fields — ignore meta
     return {
-      insight: mentorText.split('.')[0] + '.',
-      reason: mentorText,
-      actions: [
-        `Focus on mastering ${gap} — it's your #1 gap`,
-        `Build a portfolio project using ${gap}`,
-        `Update your resume with ${gap} keywords`
-      ],
-      roadmap: [
-        `Day 1-2 [Beginner | 4 hrs | ${gap}]: Learn ${gap} fundamentals`,
-        `Day 3-4 [Intermediate | 4 hrs | ${gap}]: Practice real-world exercises`,
-        `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Build a mini project`,
-        `Day 7 [Intermediate | 2 hrs | Portfolio]: Polish & push to GitHub`,
-        `Week 2 [Advanced | 3 hrs | Career]: Update resume, apply to 10 roles`
-      ],
-      today_task: `Start a ${gap} crash course and complete the first module (2-3 hours)`
+      insight: data.insight,
+      reason: data.reason,
+      actions: data.actions,
+      roadmap: data.roadmap,
+      today_task: data.today_task
     };
   } catch (err) {
-    console.error('Gemini SDK error:', err);
-    // Graceful fallback so UI still works if Gemini fails
-    return generateDemoResponse(userProfile, question);
+    console.error('AI Mentor error:', err);
+    return generateFallback(userProfile, question);
   }
 }
 
-
-function generateDemoResponse(profile: UserProfile, question: string): AIResponse {
+function generateFallback(profile: UserProfile, question: string): AIResponse {
   const gap = profile.gaps[0] || 'SQL';
-  const skill = profile.skills[0] || 'Python';
+  const gap2 = profile.gaps[1] || gap;
+  const skill = profile.skills[0] || 'your existing skills';
   const role = profile.targetRole;
-
-  if (question.toLowerCase().includes('reject')) {
-    return {
-      insight: `Your ${profile.readinessScore}% readiness score is the primary rejection trigger for ${role} roles.`,
-      reason: `94% of ${role} job postings require ${gap}, yet your resume shows 0 mentions. Recruiters use ATS systems that auto-filter for these keywords before human review.`,
-      actions: [
-        `Add ${gap} to your resume with at least 2 project examples`,
-        'Rewrite your summary to match the JD keywords for your target role',
-        'Build one end-to-end project demonstrating data handling'
-      ],
-      roadmap: [
-        `Day 1: Take a 3-hour ${gap} crash course (free on YouTube)`,
-        `Day 2: Complete 10 ${gap} practice exercises`,
-        `Day 3: Start a small project using ${gap}`,
-        `Week 1: Deploy the project on GitHub with a clear README`,
-        `Week 2: Update resume, apply to 5 jobs with tailored cover letters`
-      ],
-      today_task: `Watch the top-rated ${gap} beginner tutorial and take notes (2–3 hours)`
-    };
-  }
+  const score = profile.readinessScore;
 
   return {
-    insight: `To become a ${role}, mastering ${gap} is your highest-leverage skill to acquire right now.`,
-    reason: `Your profile shows strong ${skill} foundation (${profile.experience_years}+ yrs), but ${gap} appears in 89% of ${role} job descriptions. This single gap explains your low readiness score.`,
+    insight: `Your ${score}% readiness score is below the competitive threshold for ${role} roles — the critical blocker is your missing ${gap} skill.`,
+    reason: `${role} job postings require ${gap} in 89% of listings. Your score of ${score}% places you below competitive candidates. Recruiters use ATS systems that filter resumes before human review, and missing ${gap} and ${gap2} triggers automatic rejection. Your strength in ${skill} is a good foundation but insufficient alone.`,
     actions: [
-      `Master ${gap} fundamentals in the next 2 weeks`,
-      `Build one real project using ${skill} + ${gap} together`,
-      'Add quantified achievements to your resume (e.g., "Reduced X by 40%")'
+      `Complete a structured ${gap} course (target: 20 hours over 2 weeks)`,
+      `Build one end-to-end project demonstrating ${gap} and publish it on GitHub`,
+      `Update your resume with ${gap}-related keywords and quantified achievements`,
+      `Network with 3 ${role} professionals on LinkedIn this week`,
+      `Practice explaining your ${skill} projects in a 2-minute interview pitch`
     ],
     roadmap: [
-      `Day 1–2: ${gap} fundamentals (basic syntax + queries)`,
-      `Day 3–4: Intermediate ${gap} (joins, aggregations, subqueries)`,
-      'Day 5–7: Build mini-project combining your existing skills',
-      'Week 2: Publish on GitHub, update LinkedIn, apply to 10 roles',
-      'Week 3: Do 3 mock interviews and collect feedback'
+      `Day 1-2 [Beginner | 3 hrs | ${gap}]: Learn ${gap} fundamentals (YouTube crash course or Coursera free tier)`,
+      `Day 3-4 [Beginner | 4 hrs | ${gap}]: Complete 10 practice exercises to solidify core ${gap} concepts`,
+      `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Build a mini project combining ${gap} with ${skill}`,
+      `Day 7 [Intermediate | 2 hrs | ${gap2}]: Start ${gap2} basics and link it to your project`,
+      `Week 2 [Intermediate | 8 hrs | Project]: Polish your project, write documentation, deploy to GitHub`,
+      `Week 3 [Advanced | 4 hrs | Career]: Update resume, tailor for 5 ${role} postings, submit applications`,
+      `Week 4 [Advanced | 3 hrs | Interview]: Do 3 mock interviews focusing on ${gap} and ${gap2} scenarios`
     ],
-    today_task: `Set up your development environment for ${gap} and complete 5 beginner exercises`
+    today_task: `Set up your ${gap} learning environment and complete the first module of a free course (target: 2-3 hours)`
   };
 }
 
@@ -382,7 +341,7 @@ export default function Mentors() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">AI Career Mentor</h1>
-              <p className="text-xs text-slate-500">Powered by Google Gemini · Personalised to your profile</p>
+              <p className="text-xs text-slate-500">Guidance based on your uploaded resume · Powered by Google Gemini</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -568,8 +527,9 @@ export default function Mentors() {
                   Ask
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-2 text-center">
-                Responses are personalised to your profile · Powered by Google Gemini
+              <p className="text-[11px] text-slate-500 mt-2 text-center flex items-center justify-center gap-1.5">
+                <ShieldCheck size={11} className="text-emerald-500" />
+                Guidance based on your uploaded resume · No generic advice — fully personalized · Powered by Google Gemini
               </p>
             </div>
           </div>
