@@ -2,7 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Play, Clock, ChevronRight, CheckCircle, RotateCcw, Mic, MicOff, AlertTriangle } from 'lucide-react';
 import { interviewQuestions } from '../data/mockData';
 
-type Stage = 'intro' | 'interview' | 'result';
+type Stage = 'intro' | 'interview' | 'evaluating' | 'result';
+
+interface Evaluation {
+  score: number;
+  feedback: string;
+  improvement: string;
+}
 
 const categoryColors: Record<string, string> = {
   Behavioral: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -22,6 +28,7 @@ export default function MockInterview() {
   const [stage, setStage] = useState<Stage>('intro');
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<string[]>(Array(interviewQuestions.length).fill(''));
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [timeLeft, setTimeLeft] = useState(120);
   const [totalTime, setTotalTime] = useState(0);
   const [showHint, setShowHint] = useState(false);
@@ -51,7 +58,7 @@ export default function MockInterview() {
 
   const resetTimer = () => setTimeLeft(120);
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setShowHint(false);
     setRecording(false);
     if (qIndex + 1 < interviewQuestions.length) {
@@ -60,8 +67,33 @@ export default function MockInterview() {
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (totalRef.current) clearInterval(totalRef.current);
-      setStage('result');
+      await submitInterview();
     }
+  };
+
+  const submitInterview = async () => {
+    setStage('evaluating');
+    try {
+      const qaPairs = interviewQuestions.map((q, i) => ({
+        question: q.question,
+        category: q.category,
+        answer: answers[i]
+      }));
+
+      const res = await fetch('http://localhost:5000/api/interview/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qaPairs })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setEvaluations(data.evaluations || []);
+      }
+    } catch (e) {
+      console.error('Failed to evaluate interview', e);
+    }
+    setStage('result');
   };
 
   const startInterview = () => {
@@ -78,6 +110,8 @@ export default function MockInterview() {
     if (totalRef.current) clearInterval(totalRef.current);
     setStage('intro');
     setQIndex(0);
+    setEvaluations([]);
+    setAnswers(Array(interviewQuestions.length).fill(''));
     setTimeLeft(120);
     setTotalTime(0);
   };
@@ -155,6 +189,21 @@ export default function MockInterview() {
     );
   }
 
+  if (stage === 'evaluating') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-teal-50 pt-24 pb-16 px-4 flex flex-col items-center justify-center">
+        <div className="animate-spin mb-6">
+          <svg className="w-16 h-16 text-teal-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Analyzing your responses...</h2>
+        <p className="text-gray-500">Gemini AI is evaluating your answers and generating personalized feedback.</p>
+      </div>
+    );
+  }
+
   if (stage === 'result') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-teal-50 pt-24 pb-16 px-4">
@@ -182,7 +231,7 @@ export default function MockInterview() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h3 className="font-bold text-gray-900 mb-5">Your Responses</h3>
+            <h3 className="font-bold text-gray-900 mb-5">Your Responses & Feedback</h3>
             <div className="space-y-5">
               {interviewQuestions.map((q, i) => (
                 <div key={q.id} className="border border-gray-100 rounded-xl p-4">
@@ -192,11 +241,26 @@ export default function MockInterview() {
                   </div>
                   <p className="text-sm font-semibold text-gray-800 mb-2">{q.question}</p>
                   {answers[i] ? (
-                    <p className="text-sm text-gray-600 bg-teal-50 rounded-lg p-3 leading-relaxed">"{answers[i]}"</p>
+                    <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 leading-relaxed mb-3">Your Answer: "{answers[i]}"</p>
                   ) : (
-                    <p className="text-sm text-gray-400 italic">No answer provided</p>
+                    <p className="text-sm text-gray-400 italic mb-3">No answer provided</p>
                   )}
-                  {q.hint && <p className="text-xs text-teal-600 mt-2 bg-teal-50 px-3 py-1.5 rounded-lg">Tip: {q.hint}</p>}
+                  
+                  {evaluations[i] && (
+                    <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 mt-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-teal-800 uppercase tracking-wider">AI Evaluation</span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${evaluations[i].score >= 70 ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
+                          Score: {evaluations[i].score}/100
+                        </span>
+                      </div>
+                      <p className="text-sm text-teal-900 mb-2">{evaluations[i].feedback}</p>
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-semibold text-teal-700 shrink-0 mt-0.5">Improvement:</span>
+                        <p className="text-sm text-teal-800 italic">{evaluations[i].improvement}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

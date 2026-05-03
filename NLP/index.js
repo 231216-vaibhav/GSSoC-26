@@ -586,6 +586,62 @@ app.post('/api/resume/parse', upload.single('resume'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/interview/evaluate — AI Mock Interview Evaluator
+// Body: { qaPairs: [{ question: string, answer: string, category: string }] }
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/interview/evaluate', async (req, res) => {
+  try {
+    const { qaPairs } = req.body;
+    if (!qaPairs || !Array.isArray(qaPairs)) {
+      return res.status(400).json({ error: 'Missing qaPairs array' });
+    }
+
+    if (!genAI) {
+      return res.json({
+        evaluations: qaPairs.map(qa => ({
+          score: 50,
+          feedback: "Gemini API key is not configured. This is a fallback feedback.",
+          improvement: "Please configure your environment variables to receive real feedback."
+        }))
+      });
+    }
+
+    const prompt = `You are an expert technical and behavioral interview coach. 
+You will be provided with a set of questions and the candidate's answers.
+For each question, evaluate the candidate's answer based on the category (Technical, Behavioral, System Design).
+
+Provide a valid JSON response exactly matching this schema:
+{
+  "evaluations": [
+    {
+      "score": number (0-100),
+      "feedback": "2-3 sentences evaluating what they did well and where they failed",
+      "improvement": "1 actionable sentence on how to phrase the answer better"
+    }
+  ]
+}
+
+Input Q&A Pairs:
+${JSON.stringify(qaPairs, null, 2)}
+`;
+
+    const { parsed, model } = await callGeminiSDK(prompt);
+    
+    // Ensure the array matches the length of input
+    let evals = parsed.evaluations || [];
+    if (evals.length !== qaPairs.length) {
+      console.warn('[INTERVIEW-EVAL] Returned array length mismatch. Patching...');
+      evals = qaPairs.map((_, i) => evals[i] || { score: 0, feedback: "Failed to evaluate.", improvement: "Try answering more clearly." });
+    }
+
+    return res.json({ evaluations: evals });
+  } catch (err) {
+    console.error('[INTERVIEW-EVAL ERROR]', err.message);
+    return res.status(500).json({ error: 'Evaluation failed' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`\n✅ SkillBridge NLP + AI Mentor v5.0`);
