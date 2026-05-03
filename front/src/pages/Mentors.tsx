@@ -111,12 +111,12 @@ function generateDemoResponse(profile: UserProfile, question: string): AIRespons
 
 // ─── Quick Action Prompts ─────────────────────────────────────────────────────
 const QUICK_ACTIONS = [
-  { id: 'reject', icon: AlertCircle, label: 'Why am I getting rejected?', color: 'text-red-400', bg: 'bg-red-500/10 hover:bg-red-500/20 border-red-500/20' },
-  { id: 'next', icon: TrendingUp, label: 'What should I learn next?', color: 'text-blue-400', bg: 'bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/20' },
-  { id: 'roadmap', icon: Map, label: 'Generate my roadmap', color: 'text-purple-400', bg: 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/20' },
-  { id: 'weakness', icon: Brain, label: 'Explain my weaknesses', color: 'text-orange-400', bg: 'bg-orange-500/10 hover:bg-orange-500/20 border-orange-500/20' },
-  { id: 'resume', icon: FileText, label: 'Improve my resume', color: 'text-green-400', bg: 'bg-green-500/10 hover:bg-green-500/20 border-green-500/20' },
-  { id: 'interview', icon: MessageSquare, label: 'Prep for interview', color: 'text-teal-400', bg: 'bg-teal-500/10 hover:bg-teal-500/20 border-teal-500/20' },
+  { id: 'reject', icon: AlertCircle, label: 'Why am I getting rejected?', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'next', icon: TrendingUp, label: 'What should I learn next?', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'roadmap', icon: Map, label: 'Generate my roadmap', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'weakness', icon: Brain, label: 'Explain my weaknesses', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'resume', icon: FileText, label: 'Improve my resume', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'interview', icon: MessageSquare, label: 'Prep for interview', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
 ];
 
 const ACTION_PROMPTS: Record<string, string> = {
@@ -135,7 +135,7 @@ function ResponseCard({ item, index }: { item: ConversationItem; index: number }
     <div className="animate-fadeIn">
       {/* Question bubble */}
       <div className="flex justify-end mb-4">
-        <div className="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md text-sm font-medium shadow-lg shadow-indigo-500/20">
+        <div className="bg-[#10b981] text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md text-sm font-medium shadow-sm">
           {item.question}
         </div>
       </div>
@@ -143,49 +143,49 @@ function ResponseCard({ item, index }: { item: ConversationItem; index: number }
       {/* Structured response */}
       <div className="space-y-3 mb-6">
         {/* Insight */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-indigo-500/30 transition-colors">
+        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
           <div className="flex items-center gap-2 mb-2">
-            <Lightbulb size={15} className="text-yellow-400" />
-            <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Insight</span>
+            <Lightbulb size={15} className="text-emerald-500" />
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Insight</span>
           </div>
-          <p className="text-white text-sm font-medium leading-relaxed">{r.insight}</p>
+          <p className="text-slate-700 text-sm font-medium leading-relaxed">{r.insight}</p>
         </div>
 
         {/* Reason */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-blue-500/30 transition-colors">
+        <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
           <div className="flex items-center gap-2 mb-2">
-            <BarChart2 size={15} className="text-blue-400" />
-            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Data-Backed Reason</span>
+            <BarChart2 size={15} className="text-emerald-500" />
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Data-Backed Reason</span>
           </div>
-          <p className="text-slate-300 text-sm leading-relaxed">{r.reason}</p>
+          <p className="text-slate-600 text-sm leading-relaxed">{r.reason}</p>
         </div>
 
         {/* Actions + Roadmap side by side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-green-500/30 transition-colors">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
             <div className="flex items-center gap-2 mb-3">
-              <ListChecks size={15} className="text-green-400" />
-              <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Action Steps</span>
+              <ListChecks size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Action Steps</span>
             </div>
             <ul className="space-y-2">
               {r.actions.map((a, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                  <CheckCircle2 size={14} className="text-green-400 mt-0.5 shrink-0" />
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                  <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 shrink-0" />
                   {a}
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 hover:border-purple-500/30 transition-colors">
+          <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4 hover:border-emerald-300 transition-colors">
             <div className="flex items-center gap-2 mb-3">
-              <Calendar size={15} className="text-purple-400" />
-              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Roadmap</span>
+              <Calendar size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Roadmap</span>
             </div>
             <ul className="space-y-2">
               {r.roadmap.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                  <span className="text-purple-400 font-bold text-xs mt-0.5 shrink-0">{i + 1}.</span>
+                <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                  <span className="text-emerald-500 font-bold text-xs mt-0.5 shrink-0">{i + 1}.</span>
                   {step}
                 </li>
               ))}
@@ -194,12 +194,12 @@ function ResponseCard({ item, index }: { item: ConversationItem; index: number }
         </div>
 
         {/* Today's Task */}
-        <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 rounded-2xl p-4">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Zap size={15} className="text-indigo-300" />
-            <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Today's Task</span>
+            <Zap size={15} className="text-emerald-600" />
+            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Today's Task</span>
           </div>
-          <p className="text-white text-sm font-semibold">{r.today_task}</p>
+          <p className="text-emerald-950 text-sm font-semibold">{r.today_task}</p>
         </div>
       </div>
     </div>
@@ -211,12 +211,12 @@ function ScoreRing({ score }: { score: number }) {
   const r = 40;
   const circ = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
-  const color = score >= 70 ? '#22d3ee' : score >= 40 ? '#f59e0b' : '#f87171';
+  const color = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
 
   return (
     <div className="relative w-24 h-24 mx-auto">
       <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8" />
         <circle
           cx="50" cy="50" r={r} fill="none"
           stroke={color} strokeWidth="8"
@@ -227,8 +227,8 @@ function ScoreRing({ score }: { score: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold text-white">{score}%</span>
-        <span className="text-[9px] text-slate-400 uppercase tracking-wide">Ready</span>
+        <span className="text-xl font-bold text-slate-900">{score}%</span>
+        <span className="text-[9px] text-slate-500 uppercase tracking-wide">Ready</span>
       </div>
     </div>
   );
@@ -271,27 +271,27 @@ export default function Mentors() {
   const clearHistory = () => setConversations([]);
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] pt-20 pb-8 px-4">
+    <div className="min-h-screen bg-slate-50 pt-20 pb-8 px-4 font-sans">
       <div className="max-w-7xl mx-auto h-full">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <div className="w-10 h-10 rounded-xl bg-[#10b981] flex items-center justify-center shadow-sm">
               <Brain size={20} className="text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">AI Career Mentor</h1>
-              <p className="text-xs text-slate-400">Powered by Google Gemini · Personalised to your profile</p>
+              <h1 className="text-xl font-bold text-slate-900">AI Career Mentor</h1>
+              <p className="text-xs text-slate-500">Powered by Google Gemini · Personalised to your profile</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium px-3 py-1.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Gemini Active
             </span>
             {conversations.length > 0 && (
-              <button onClick={clearHistory} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-full transition-all">
+              <button onClick={clearHistory} className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 text-xs border border-slate-200 hover:border-slate-300 bg-white px-3 py-1.5 rounded-full transition-all shadow-sm">
                 <RefreshCw size={12} /> Clear
               </button>
             )}
@@ -302,31 +302,31 @@ export default function Mentors() {
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 h-[calc(100vh-180px)]">
 
           {/* ── LEFT PANEL ────────────────────────────── */}
-          <div className="flex flex-col gap-4 overflow-y-auto">
+          <div className="flex flex-col gap-4 overflow-y-auto pr-1">
 
             {/* Profile card */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-5">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 border border-white/10 flex items-center justify-center">
-                  <User size={18} className="text-white" />
+                <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                  <User size={18} className="text-slate-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{profile.name}</p>
-                  <p className="text-xs text-indigo-300">→ {profile.targetRole}</p>
+                  <p className="text-sm font-bold text-slate-900">{profile.name}</p>
+                  <p className="text-xs text-emerald-600">→ {profile.targetRole}</p>
                 </div>
               </div>
 
               <ScoreRing score={profile.readinessScore} />
 
               <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Top Skill Gaps</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Skill Gaps</p>
                 {profile.gaps.slice(0, 4).map((gap, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <AlertCircle size={12} className="text-red-400 shrink-0" />
-                    <span className="text-sm text-slate-300">{gap}</span>
-                    <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                    <AlertCircle size={12} className="text-emerald-500 shrink-0" />
+                    <span className="text-sm text-slate-700">{gap}</span>
+                    <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full"
+                        className="h-full bg-emerald-500 rounded-full"
                         style={{ width: `${85 - i * 12}%` }}
                       />
                     </div>
@@ -334,19 +334,19 @@ export default function Mentors() {
                 ))}
               </div>
 
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Your Skills</p>
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Your Skills</p>
                 <div className="flex flex-wrap gap-1.5">
                   {profile.skills.map(s => (
-                    <span key={s} className="text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 px-2.5 py-0.5 rounded-full">{s}</span>
+                    <span key={s} className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full">{s}</span>
                   ))}
                 </div>
               </div>
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Quick Actions</p>
+            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-4">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</p>
               <div className="space-y-2">
                 {QUICK_ACTIONS.map(action => (
                   <button
@@ -359,8 +359,8 @@ export default function Mentors() {
                       ? <Loader2 size={15} className={`${action.color} animate-spin shrink-0`} />
                       : <action.icon size={15} className={`${action.color} shrink-0`} />
                     }
-                    <span className="text-slate-200 font-medium text-xs">{action.label}</span>
-                    <ChevronRight size={13} className="ml-auto text-slate-500" />
+                    <span className="text-slate-700 font-medium text-xs">{action.label}</span>
+                    <ChevronRight size={13} className="ml-auto text-slate-400" />
                   </button>
                 ))}
               </div>
@@ -368,17 +368,17 @@ export default function Mentors() {
           </div>
 
           {/* ── RIGHT PANEL ───────────────────────────── */}
-          <div className="flex flex-col bg-white/3 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="flex flex-col bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
 
             {/* Conversation area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-2">
               {conversations.length === 0 && !loading && (
                 <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
-                    <Sparkles size={36} className="text-indigo-400" />
+                  <div className="w-20 h-20 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-6">
+                    <Sparkles size={36} className="text-emerald-500" />
                   </div>
-                  <h2 className="text-xl font-bold text-white mb-2">Your AI Career Mentor</h2>
-                  <p className="text-slate-400 text-sm max-w-sm mb-6">
+                  <h2 className="text-xl font-bold text-slate-900 mb-2">Your AI Career Mentor</h2>
+                  <p className="text-slate-500 text-sm max-w-sm mb-6">
                     This isn't a chatbot. It's a structured career guidance system that understands your profile and gives you data-backed, actionable insights.
                   </p>
                   <div className="grid grid-cols-2 gap-3 max-w-sm">
@@ -386,7 +386,7 @@ export default function Mentors() {
                       <button
                         key={q}
                         onClick={() => askQuestion(q)}
-                        className="text-xs text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-500/30 text-slate-300 rounded-xl px-3 py-3 transition-all"
+                        className="text-xs text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-emerald-300 text-slate-700 rounded-xl px-3 py-3 transition-all"
                       >
                         {q}
                       </button>
@@ -401,15 +401,15 @@ export default function Mentors() {
 
               {loading && (
                 <div className="flex items-center gap-3 py-4">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
-                    <Brain size={16} className="text-indigo-400" />
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                    <Brain size={16} className="text-emerald-500" />
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span className="text-slate-400 text-sm">Analyzing your profile…</span>
+                  <span className="text-slate-500 text-sm">Analyzing your profile…</span>
                 </div>
               )}
 
@@ -417,8 +417,8 @@ export default function Mentors() {
             </div>
 
             {/* Input bar */}
-            <div className="border-t border-white/10 p-4">
-              <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus-within:border-indigo-500/50 transition-colors">
+            <div className="border-t border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus-within:border-emerald-400 transition-colors">
                 <Target size={16} className="text-slate-400 shrink-0" />
                 <input
                   type="text"
@@ -426,13 +426,13 @@ export default function Mentors() {
                   onChange={e => setCustomInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && askQuestion(customInput)}
                   placeholder="Ask anything about your career, skills, or goals…"
-                  className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
+                  className="flex-1 bg-transparent text-sm text-slate-900 placeholder-slate-400 outline-none"
                   disabled={loading}
                 />
                 <button
                   onClick={() => askQuestion(customInput)}
                   disabled={!customInput.trim() || loading}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5"
+                  className="bg-[#10b981] hover:bg-[#059669] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
                 >
                   {loading ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
                   Ask
