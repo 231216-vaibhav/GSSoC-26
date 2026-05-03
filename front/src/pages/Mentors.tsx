@@ -30,62 +30,40 @@ interface UserProfile {
   experience_years: number;
 }
 
-// ─── Gemini API ───────────────────────────────────────────────────────────────
-const GEMINI_API_KEY = 'AIzaSyDemo_replace_with_real_key'; // Replace with real key
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+// ─── Backend API call ─────────────────────────────────────────────────────────
+const BACKEND_URL = 'http://localhost:5000';
 
-async function callGemini(userProfile: UserProfile, question: string): Promise<AIResponse> {
-  const systemPrompt = `You are an elite career mentor and analyst. You NEVER give generic advice. 
-You ALWAYS use the user's actual data. Your tone is professional, direct, and data-driven.
-You MUST return ONLY a valid JSON object — no markdown, no explanation, no code fences.
-
-User Profile:
-- Name: ${userProfile.name}
-- Target Role: ${userProfile.targetRole}
-- Current Skills: ${userProfile.skills.join(', ')}
-- Skill Gaps: ${userProfile.gaps.join(', ')}
-- Readiness Score: ${userProfile.readinessScore}%
-- Experience: ${userProfile.experience_years} years
-
-Question: "${question}"
-
-Return this exact JSON structure (no extra text, no markdown):
-{
-  "insight": "One sharp sentence about the core issue, specific to this user",
-  "reason": "Data-backed explanation referencing their actual skills/gaps and industry statistics",
-  "actions": ["Step 1 (specific)", "Step 2 (specific)", "Step 3 (specific)"],
-  "roadmap": ["Day 1: Task", "Day 2: Task", "Day 3: Task", "Week 1: Task", "Week 2: Task"],
-  "today_task": "One clear task the user must do TODAY"
-}`;
-
+async function callAIMentor(userProfile: UserProfile, question: string): Promise<AIResponse> {
   try {
-    const res = await fetch(GEMINI_URL, {
+    const res = await fetch(`${BACKEND_URL}/api/ai-mentor`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: systemPrompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-          responseMimeType: 'application/json'
-        }
+        userData: {
+          role: userProfile.targetRole,
+          score: userProfile.readinessScore,
+          gaps: userProfile.gaps,
+          skills: userProfile.skills,
+          experience_years: userProfile.experience_years
+        },
+        question
       })
     });
 
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
-    const data = await res.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) throw new Error('Empty response from Gemini');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Backend error: ${res.status}`);
+    }
 
-    // Parse JSON (strip code fences if any)
-    const cleaned = raw.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(cleaned);
+    const data = await res.json();
+    return data as AIResponse;
   } catch (err) {
-    // Fallback: demo data so UI still works without a real API key
-    console.warn('Gemini API fallback:', err);
+    console.error('AI Mentor backend error:', err);
+    // Graceful fallback so UI still works if backend is down
     return generateDemoResponse(userProfile, question);
   }
 }
+
 
 function generateDemoResponse(profile: UserProfile, question: string): AIResponse {
   const gap = profile.gaps[0] || 'SQL';
@@ -284,7 +262,7 @@ export default function Mentors() {
     setActiveAction(actionId || null);
     setCustomInput('');
 
-    const response = await callGemini(profile, question);
+    const response = await callAIMentor(profile, question);
     setConversations(prev => [...prev, { question, response, timestamp: new Date() }]);
     setLoading(false);
     setActiveAction(null);
