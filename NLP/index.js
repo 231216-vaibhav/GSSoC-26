@@ -31,9 +31,22 @@ async function callGeminiSDK(promptText) {
       const raw = result.response.text();
       if (!raw) throw new Error('Empty response');
 
-      // Strip accidental markdown fences
-      const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
+      let parsed;
+      try {
+        // First try: Clean basic markdown and parse
+        const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch (err) {
+        // Second try: Regex extraction if there's extra text around it
+        console.warn(`[GEMINI-SDK] ${modelName} initial parse failed, trying regex extraction...`);
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('Regex extraction failed to find JSON structure.');
+        }
+      }
+
       console.log(`[GEMINI-SDK] ✅ Success via ${modelName}`);
       return { parsed, model: modelName };
     } catch (e) {

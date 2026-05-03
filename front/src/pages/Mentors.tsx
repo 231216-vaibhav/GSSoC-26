@@ -6,7 +6,13 @@ import {
   FileText, User, Code2, ShieldCheck
 } from 'lucide-react';
 
-const REQUIRED_SKILLS = ["SQL", "Python", "Excel", "Power BI", "Statistics"];
+const ROLE_REQUIREMENTS: Record<string, string[]> = {
+  "Software Developer": ["JavaScript", "Python", "React", "Node.js", "Git", "SQL"],
+  "Data Analyst": ["SQL", "Python", "Excel", "Power BI", "Statistics", "Tableau"],
+  "Frontend Engineer": ["HTML", "CSS", "JavaScript", "React", "TypeScript", "Tailwind"],
+  "Backend Engineer": ["Node.js", "Python", "Java", "SQL", "Docker", "AWS"],
+  "Product Manager": ["Agile", "Jira", "Communication", "Data Analysis", "SQL", "Strategy"]
+};
 
 // ─── Backend API (Gemini key stays server-side) ───────────────────────────────
 const BACKEND_URL = 'http://localhost:5000';
@@ -234,6 +240,7 @@ function ScoreRing({ score }: { score: number }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Mentors() {
+  const [targetRole, setTargetRole] = useState<string>("Software Developer");
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -242,25 +249,22 @@ export default function Mentors() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. Read parsed resume from localStorage
     const saved = localStorage.getItem('parsedResume');
     if (!saved) return;
     
     try {
       const parsedData = JSON.parse(saved);
       const extractedSkills = parsedData.skills || [];
-      
-      // 2. Normalize and extract unique skills
       const userSkills = Array.from(new Set(extractedSkills.map((s: any) => s.name))) as string[];
       
-      // 3. Gap Calculation
+      const requiredSkills = ROLE_REQUIREMENTS[targetRole] || ROLE_REQUIREMENTS["Software Developer"];
+      
       const gaps: string[] = [];
       const gapDetails: { name: string; isPartial: boolean }[] = [];
       let matchedCount = 0;
       
-      REQUIRED_SKILLS.forEach(reqSkill => {
+      requiredSkills.forEach(reqSkill => {
         const lowerReq = reqSkill.toLowerCase();
-        // Check if required skill is in extracted skills
         const foundSkill = extractedSkills.find((s: any) => s.name.toLowerCase() === lowerReq);
         
         if (!foundSkill) {
@@ -268,7 +272,6 @@ export default function Mentors() {
           gapDetails.push({ name: reqSkill, isPartial: false });
         } else {
           matchedCount++;
-          // Partial gap if low occurrences
           if (foundSkill.occurrences < 2) {
             gaps.push(reqSkill);
             gapDetails.push({ name: reqSkill, isPartial: true });
@@ -276,12 +279,11 @@ export default function Mentors() {
         }
       });
       
-      // 4. Score Calculation
-      const score = Math.round((matchedCount / REQUIRED_SKILLS.length) * 100);
+      const score = Math.round((matchedCount / requiredSkills.length) * 100);
 
       setProfile({
         name: 'You',
-        targetRole: 'Data Analyst',
+        targetRole: targetRole,
         readinessScore: score,
         skills: userSkills,
         gaps: gaps,
@@ -292,7 +294,7 @@ export default function Mentors() {
     } catch (e) {
       console.error('Error parsing saved resume data:', e);
     }
-  }, []);
+  }, [targetRole]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -369,44 +371,53 @@ export default function Mentors() {
                 <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
                   <User size={18} className="text-slate-500" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-bold text-slate-900">{profile.name}</p>
-                  <p className="text-xs text-emerald-600">→ {profile.targetRole}</p>
+                  <select 
+                    value={targetRole}
+                    onChange={(e) => setTargetRole(e.target.value)}
+                    className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 mt-0.5 outline-none font-medium w-full cursor-pointer"
+                  >
+                    {Object.keys(ROLE_REQUIREMENTS).map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
+              <div className="text-center mb-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score calculated based on your skills</span>
+              </div>
               <ScoreRing score={profile.readinessScore} />
 
               <div className="mt-4 space-y-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Top Skill Gaps</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Missing Skills</p>
                 {(!profile.gapDetails || profile.gapDetails.length === 0) ? (
                   <p className="text-sm text-emerald-600 font-medium">You have all the required skills!</p>
                 ) : (
                   profile.gapDetails.slice(0, 4).map((gap, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <AlertCircle size={12} className={gap.isPartial ? "text-amber-500 shrink-0" : "text-emerald-500 shrink-0"} />
+                      <AlertCircle size={12} className={gap.isPartial ? "text-amber-500 shrink-0" : "text-red-500 shrink-0"} />
                       <span className="text-sm text-slate-700 flex-1 flex items-center justify-between">
                         {gap.name}
                         {gap.isPartial && <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-sm">Low Exp</span>}
                       </span>
-                      <div className="w-20 h-1 rounded-full bg-slate-100 overflow-hidden shrink-0">
-                        <div
-                          className={`h-full rounded-full ${gap.isPartial ? 'bg-amber-400 w-[30%]' : 'bg-red-400 w-[0%]'}`}
-                        />
-                      </div>
                     </div>
                   ))
                 )}
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Your Skills</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(!profile.skills || profile.skills.length === 0) ? (
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Detected from your resume</p>
+                <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
+                  {(!profile.rawSkills || profile.rawSkills.length === 0) ? (
                     <span className="text-xs text-slate-400">No skills detected.</span>
                   ) : (
-                    profile.skills.map(s => (
-                      <span key={s} className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-0.5 rounded-full">{s}</span>
+                    profile.rawSkills.slice(0, 8).map((s, i) => (
+                      <div key={i} className="flex justify-between items-center bg-slate-50 border border-slate-100 px-2 py-1 rounded-md">
+                        <span className="text-xs text-slate-700 font-medium">{s.name}</span>
+                        <span className="text-[10px] text-slate-400">{s.occurrences} mention{s.occurrences > 1 ? 's' : ''}</span>
+                      </div>
                     ))
                   )}
                 </div>
