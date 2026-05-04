@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, Zap } from 'lucide-react';
+import { Menu, X, Zap, Sparkles, User, LogOut } from 'lucide-react';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 
 export default function Navbar() {
@@ -16,111 +16,135 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const goHome = (section?: string) => {
-    setOpen(false);
-    if (location.pathname !== '/') {
-      navigate('/');
-      if (section) {
-        setTimeout(() => {
-          document.getElementById(section)?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      }
-    } else if (section) {
-      document.getElementById(section)?.scrollIntoView({ behavior: 'smooth' });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
   const navLinks = [
-    { label: 'Home', action: () => goHome() },
-    { label: 'Skill Analysis', action: () => { setOpen(false); navigate('/skill-analysis'); } },
-    { label: 'Mentors', action: () => { setOpen(false); navigate('/mentors'); } },
-    { label: 'Mock Interview', action: () => { setOpen(false); navigate('/mock-interview'); } },
-    { label: 'For Colleges', action: () => { setOpen(false); navigate('/dashboard'); } },
+    { label: 'Home', path: '/' },
+    { label: 'Skill Analysis', path: '/skill-analysis' },
+    { label: 'Mentors', path: '/mentors' },
+    { label: 'Mock Interview', path: '/mock-interview' },
+    { label: 'Profile', path: '/user-profile' },
   ];
 
+  const isActive = (path: string) => location.pathname === path;
+
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm' : 'bg-transparent'}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <button onClick={() => goHome()} className="flex items-center gap-2 group">
-            <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-emerald-400 rounded-lg flex items-center justify-center shadow-md group-hover:shadow-teal-200 transition-shadow">
-              <Zap size={16} className="text-white" />
-            </div>
-            <span className="font-bold text-xl text-gray-900">Seek<span className="text-teal-500">Out</span></span>
-          </button>
-
-          <div className="hidden md:flex items-center gap-6">
-            {navLinks.map(link => (
-              <button
-                key={link.label}
-                onClick={link.action}
-                className="text-sm font-medium text-gray-600 hover:text-teal-600 transition-colors relative group"
-              >
-                {link.label}
-                <span className="absolute -bottom-0.5 left-0 w-0 h-0.5 bg-teal-500 group-hover:w-full transition-all duration-200" />
-              </button>
-            ))}
+    <nav className={`fixed top-0 left-0 right-0 z-[9999] transition-all duration-500 flex justify-center py-4 ${
+      scrolled ? 'px-4' : 'px-2'
+    }`}>
+      <div className={`max-w-7xl w-full mx-auto px-6 h-16 flex items-center justify-between transition-all duration-500 ${
+        scrolled 
+        ? 'bg-white/90 backdrop-blur-xl border border-white/20 shadow-lg rounded-[24px]' 
+        : 'bg-white/60 backdrop-blur-md border border-slate-200/50 shadow-sm rounded-[20px]'
+      }`}>
+        
+        {/* Brand */}
+        <button onClick={() => navigate('/')} className="flex items-center gap-3 group">
+          <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+            <Zap size={20} className="text-emerald-400 fill-emerald-400" />
           </div>
-
-          <div className="hidden md:flex items-center gap-3">
-            {user ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-gray-700">{user.displayName}</span>
-                <img src={user.photoURL || ''} alt="Profile" className="w-8 h-8 rounded-full" />
-              </div>
-            ) : (
-              <>
-                <Link
-                  to="/auth"
-                  className="text-sm font-medium text-gray-600 hover:text-teal-600 transition-colors px-4 py-2 rounded-lg hover:bg-teal-50"
-                >
-                  Log In
-                </Link>
-                <button
-                  onClick={handleLogin}
-                  className="text-sm font-semibold text-white bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 px-5 py-2 rounded-lg shadow-md hover:shadow-teal-200 transition-all duration-200"
-                >
-                  Get Started Free
-                </button>
-              </>
-            )}
+          <div className="flex flex-col -gap-1">
+            <span className="font-black text-xl text-slate-900 tracking-tighter leading-none">SkillBridge</span>
+            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest leading-none mt-1 flex items-center gap-1">
+              <Sparkles size={8} /> AI Powered
+            </span>
           </div>
+        </button>
 
-          <button onClick={() => setOpen(!open)} className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
-            {open ? <X size={20} /> : <Menu size={20} />}
-          </button>
+        {/* Desktop Links */}
+        <div className="hidden md:flex items-center gap-2">
+          {navLinks.map(link => (
+            <button
+              key={link.label}
+              onClick={() => { navigate(link.path); setOpen(false); }}
+              className={`px-4 py-2 text-sm font-bold rounded-xl transition-all relative group ${
+                isActive(link.path) 
+                ? 'text-emerald-600 bg-emerald-50/50' 
+                : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              {link.label}
+              {!isActive(link.path) && (
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-emerald-500 group-hover:w-4 transition-all duration-300 rounded-full" />
+              )}
+            </button>
+          ))}
         </div>
+
+        {/* Auth Actions */}
+        <div className="hidden md:flex items-center gap-3">
+          {user ? (
+            <div className="flex items-center gap-3 p-1.5 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="px-3 hidden lg:block">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Signed in as</p>
+                <p className="text-xs font-bold text-slate-900 leading-none">{user.displayName?.split(' ')[0]}</p>
+              </div>
+              <img src={user.photoURL || ''} alt="User" className="w-9 h-9 rounded-xl border-2 border-white shadow-sm" />
+              <button 
+                onClick={() => navigate('/dashboard')}
+                className="w-9 h-9 flex items-center justify-center bg-white rounded-xl text-slate-400 hover:text-emerald-500 hover:shadow-md transition-all border border-slate-100"
+              >
+                <User size={18} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/auth')}
+                className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                Log In
+              </button>
+              <button
+                onClick={handleLogin}
+                className="px-6 py-2.5 bg-slate-900 text-white text-sm font-bold rounded-xl shadow-lg hover:shadow-emerald-200/50 hover:bg-emerald-600 transition-all active:scale-95"
+              >
+                Get Started
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Toggle */}
+        <button 
+          onClick={() => setOpen(!open)} 
+          className="md:hidden w-10 h-10 flex items-center justify-center bg-slate-50 border border-slate-100 rounded-xl text-slate-600 hover:bg-emerald-50 hover:text-emerald-500 transition-all"
+        >
+          {open ? <X size={20} /> : <Menu size={20} />}
+        </button>
       </div>
 
+      {/* Mobile Menu */}
       {open && (
-        <div className="md:hidden bg-white border-t border-gray-100 shadow-lg">
-          <div className="px-4 py-4 flex flex-col gap-1">
+        <div className="absolute top-24 left-4 right-4 bg-white/95 backdrop-blur-2xl rounded-[32px] border border-slate-100 shadow-2xl p-6 md:hidden animate-slideUp overflow-hidden">
+          <div className="flex flex-col gap-2">
             {navLinks.map(link => (
               <button
                 key={link.label}
-                onClick={link.action}
-                className="text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-600 rounded-lg transition-colors"
+                onClick={() => { navigate(link.path); setOpen(false); }}
+                className={`w-full text-left px-5 py-4 rounded-2xl text-base font-bold transition-all ${
+                  isActive(link.path) 
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200' 
+                  : 'text-slate-600 hover:bg-slate-50'
+                }`}
               >
                 {link.label}
               </button>
             ))}
-            <div className="border-t border-gray-100 mt-2 pt-3 flex flex-col gap-2">
+            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-3">
               {user ? (
-                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg">
-                  <img src={user.photoURL || ''} alt="Profile" className="w-8 h-8 rounded-full" />
-                  <span className="text-sm font-medium text-gray-700">{user.displayName}</span>
-                </div>
+                <button 
+                  onClick={() => { navigate('/dashboard'); setOpen(false); }}
+                  className="flex items-center justify-between px-5 py-4 bg-slate-900 text-white rounded-2xl font-bold"
+                >
+                  My Dashboard
+                  <User size={18} />
+                </button>
               ) : (
-                <>
-                  <Link to="/auth" onClick={() => setOpen(false)} className="px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg text-center transition-colors">
-                    Log In
-                  </Link>
-                  <button onClick={() => { setOpen(false); handleLogin(); }} className="px-4 py-3 text-sm font-semibold text-white bg-gradient-to-r from-teal-500 to-emerald-500 rounded-lg text-center w-full">
-                    Get Started Free
-                  </button>
-                </>
+                <button
+                  onClick={() => { handleLogin(); setOpen(false); }}
+                  className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold"
+                >
+                  Get Started Free <Sparkles size={16} />
+                </button>
               )}
             </div>
           </div>

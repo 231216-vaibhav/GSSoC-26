@@ -13,98 +13,310 @@ app.use(express.json());
 // ── Gemini SDK Setup (server-side only — key NEVER exposed to frontend) ────────
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// Collect all available Gemini API keys from environment
+// ─── Collect up to 6 Gemini API keys ──────────────────────────────────────────
 const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY,
   process.env.GEMINI_API_KEY_2,
-  'AIzaSyDwISjIPyHZsPEWanLFp7zpFpOzIK8XaKw' // User provided fallback key
+  process.env.GEMINI_API_KEY_3,
+  process.env.GEMINI_API_KEY_4,
+  process.env.GEMINI_API_KEY_5,
+  process.env.GEMINI_API_KEY_6,
+  'AIzaSyDwISjIPyHZsPEWanLFp7zpFpOzIK8XaKw',
 ].filter(Boolean);
 
-// Models to try in order — gemini-1.5-flash first per requirements
-const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-2.5-flash'];
+// ─── Collect Groq & Mistral Keys (Free Tier) ──────────────────────────────────
+const GROQ_KEYS = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(Boolean);
+const TOGETHER_KEYS = [process.env.TOGETHER_API_KEY].filter(Boolean);
 
-async function callGeminiSDK(promptText) {
-  if (GEMINI_KEYS.length === 0) throw new Error('No GEMINI_API_KEY set');
+// Global genAI instance for basic checks
+const genAI = GEMINI_KEYS.length > 0 ? new GoogleGenerativeAI(GEMINI_KEYS[0]) : null;
+
+// Models prioritized by accuracy
+const GEMINI_MODELS = [
+  'gemini-1.5-pro',        // Highest accuracy, best for evaluations
+  'gemini-1.5-flash',      // Fast, good for chat
+  'gemini-2.0-flash-exp',  // Experimental high speed
+];
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const TOGETHER_MODEL = process.env.TOGETHER_MODEL || 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo';
+
+// ─── Round-robin key + model rotation — tries every key × every model ─────────
+async function callGeminiSDK(promptText, preferFast = false, customModels = null) {
+  if (GEMINI_KEYS.length === 0) return null;
+  const models = customModels || (preferFast ? [...GEMINI_MODELS].reverse() : GEMINI_MODELS);
 
   for (const apiKey of GEMINI_KEYS) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const keyHint = apiKey.slice(-4);
-    
-    for (const modelName of GEMINI_MODELS) {
+    const client = new GoogleGenerativeAI(apiKey);
+    for (const modelName of models) {
       try {
-        const model = genAI.getGenerativeModel({
+        const model = client.getGenerativeModel({
           model: modelName,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+          systemInstruction: "You are the SkillBridge Master AI — a high-performance career coach. Your #1 rule is to ALWAYS answer the user's question directly and specifically. NEVER ignore their question to talk about their score or profile gaps. Answer first, then briefly relate it to their profile if helpful. NEVER be generic; provide real names of companies, tools, or strategies.",
+          generationConfig: { temperature: 0.3, maxOutputTokens: 3000 }, // Lower temperature for higher accuracy
         });
         const result = await model.generateContent(promptText);
         const raw = result.response.text();
-        if (!raw) throw new Error('Empty response');
-
-        let parsed;
-        try {
-          // First try: Clean basic markdown and parse
-          const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-          parsed = JSON.parse(cleaned);
-        } catch (err) {
-          // Second try: Regex extraction if there's extra text around it
-          console.warn(`[GEMINI-SDK] ${modelName} initial parse failed, trying regex extraction...`);
-          const jsonMatch = raw.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            parsed = JSON.parse(jsonMatch[0]);
-          } else {
-            throw new Error('Regex extraction failed to find JSON structure.');
-          }
-        }
-
-        console.log(`[GEMINI-SDK] ✅ Success via ${modelName} (Key ...${keyHint})`);
-        return { parsed, model: modelName };
+        const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        return { parsed: JSON.parse(cleaned), model: modelName, provider: 'Gemini' };
       } catch (e) {
-        const msg = e?.message || 'unknown';
-        console.warn(`[GEMINI-SDK] ❌ ${modelName} (Key ...${keyHint}) failed: ${msg.slice(0, 120)}`);
-        
-        // If it's an API key issue or quota issue, break inner loop to try next key immediately
-        if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('key') || msg.toLowerCase().includes('429')) {
-          break; 
-        }
+        console.warn(`[GEMINI] ❌ ${modelName}: ${e.message}`);
       }
     }
   }
-  throw new Error('All Gemini keys and models exhausted');
+  return null;
+}
+
+async function callGroqSDK(promptText) {
+  if (GROQ_KEYS.length === 0) return null;
+  for (const key of GROQ_KEYS) {
+    try {
+      const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: promptText }],
+        temperature: 0.6,
+        response_format: { type: 'json_object' }
+      }, {
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+      });
+      return { parsed: JSON.parse(res.data.choices[0].message.content), model: GROQ_MODEL, provider: 'Groq' };
+    } catch (e) {
+      console.warn(`[GROQ] ❌ Error: ${e.response?.data?.error?.message || e.message}`);
+    }
+  }
+  return null;
+}
+
+async function callTogetherSDK(promptText) {
+  if (TOGETHER_KEYS.length === 0) return null;
+  for (const key of TOGETHER_KEYS) {
+    try {
+      const res = await axios.post('https://api.together.xyz/v1/chat/completions', {
+        model: TOGETHER_MODEL,
+        messages: [{ role: 'user', content: promptText }],
+        temperature: 0.6,
+      }, {
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' }
+      });
+      const raw = res.data.choices[0].message.content;
+      const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+      return { parsed: JSON.parse(cleaned), model: TOGETHER_MODEL, provider: 'Together' };
+    } catch (e) {
+      console.warn(`[TOGETHER] Skip key due to error: ${e.message}`);
+    }
+  }
+  return null;
+}
+
+// ─── Simple In-Memory Cache ──────────────────────────────────────────────────
+const cache = new Map();
+const CACHE_TTL = 1000 * 60 * 10; // 10 minutes
+
+function getCached(key) {
+  const item = cache.get(key);
+  if (item && (Date.now() - item.ts < CACHE_TTL)) return item.data;
+  return null;
+}
+
+function setCache(key, data) {
+  cache.set(key, { data, ts: Date.now() });
+}
+
+// ─── Premium Model Calls ──────────────────────────────────────────────────
+async function callOpenAI(promptText) {
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const res = await axios.post('https://api.openai.com/v1/chat/completions', {
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: [
+        { role: 'system', content: "You are the SkillBridge Master AI. Rule #1: ALWAYS answer the user's specific question directly. NEVER lecture them about their low score as a primary answer. Answer first, analysis second." },
+        { role: 'user', content: promptText }
+      ],
+      temperature: 0.3,
+      response_format: { type: "json_object" }
+    }, {
+      headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` }
+    });
+    return { parsed: JSON.parse(res.data.choices[0].message.content), model: 'GPT-4o', provider: 'OpenAI' };
+  } catch (e) { console.warn('[OPENAI] Error:', e.message); return null; }
+}
+
+async function callAnthropic(promptText) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const res = await axios.post('https://api.anthropic.com/v1/messages', {
+      model: process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20240620',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: promptText + "\n\nReturn JSON ONLY." }],
+      system: "You are the SkillBridge Master AI. Rule #1: ALWAYS answer the user's specific question directly. NEVER lecture them about their low score as a primary answer. Answer first, analysis second."
+    }, {
+      headers: { 
+        'x-api-key': process.env.ANTHROPIC_API_KEY, 
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json' 
+      }
+    });
+    const raw = res.data.content[0].text;
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+    return { parsed: JSON.parse(cleaned), model: 'Claude 3.5', provider: 'Anthropic' };
+  } catch (e) { console.warn('[ANTHROPIC] Error:', e.message); return null; }
+}
+
+async function callAI(promptText, preferFast = true) {
+  const cacheKey = promptText.substring(0, 100);
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+
+  // 1. Try High-Accuracy Premium Models first if keys exist
+  let res = await callAnthropic(promptText);
+  if (!res) res = await callOpenAI(promptText);
+
+  // 2. Fallback to Gemini Pro/Flash
+  if (!res) {
+    const models = preferFast ? ['gemini-1.5-flash', 'gemini-1.5-pro'] : ['gemini-1.5-pro', 'gemini-1.5-flash'];
+    res = await callGeminiSDK(promptText, preferFast, models);
+  }
+
+  // 3. Fallback to Groq (Lightning Fast)
+  if (!res) {
+    console.log('[AI] Falling back to GROQ (Lightning Fast)...');
+    res = await callGroqSDK(promptText);
+  }
+  
+  if (res) setCache(cacheKey, res);
+  return res;
+}
+
+// ─── Raw text AI caller (no JSON required) — for general/conversational questions ───
+async function callAIRaw(question, history = []) {
+  const historyText = history.slice(-5).map(h => `User: ${h.user}\nAI: ${h.ai_insight}`).join('\n\n');
+  const fullPrompt = history.length > 0 
+    ? `CONTEXT HISTORY:\n${historyText}\n\nCURRENT QUESTION: "${question}"\n\nINSTRUCTION: Answer ONLY the CURRENT QUESTION. Use the context history for context only if needed. Do NOT repeat or merge previous answers.`
+    : question;
+
+  // Try Gemini first (returns raw text, no JSON.parse)
+  for (const apiKey of GEMINI_KEYS) {
+    for (const modelName of ['gemini-1.5-flash', 'gemini-1.5-pro']) {
+      try {
+        const client = new GoogleGenerativeAI(apiKey);
+        const model = client.getGenerativeModel({
+          model: modelName,
+          systemInstruction: 'You are a helpful AI assistant like ChatGPT or Gemini. Answer any question accurately, helpfully, and conversationally. FOCUS ONLY ON THE CURRENT QUESTION. Do not summarize the whole conversation unless asked.',
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
+        });
+        const result = await model.generateContent(fullPrompt);
+        const text = result.response.text().trim();
+        if (text && text.length > 3) return { text, provider: 'Gemini', model: modelName };
+      } catch(e) { console.warn(`[RAW] Gemini ${modelName}: ${e.message}`); }
+    }
+  }
+  // Fallback to Groq (raw text)
+  for (const key of GROQ_KEYS) {
+    try {
+      const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: 'You are a helpful AI assistant. Answer the current question only. Do not merge with previous context.' },
+          ...history.slice(-3).map(h => ([{role: 'user', content: h.user}, {role: 'assistant', content: h.ai_insight}])).flat(),
+          { role: 'user', content: question }
+        ],
+        temperature: 0.7,
+      }, { headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' } });
+      const text = res.data.choices[0].message.content.trim();
+      if (text) return { text, provider: 'Groq', model: GROQ_MODEL };
+    } catch(e) { console.warn(`[RAW] Groq: ${e.message}`); }
+  }
+  return null;
+}
+
+// ─── Detect intent from question to customize the prompt ──────────────────────
+function detectIntent(question) {
+  const q = question.toLowerCase().trim();
+
+  // Greetings — catch anything that starts with or is a simple greeting
+  if (q.match(/^(hi+|hello+|hey+|hola|hii+|yo+|sup|greetings|good\s*(morning|evening|afternoon|night|day)|namaste|howdy|wassup|what'?s up|how are you|how r u|how do you do|nice to meet|pleased to meet)/)) return 'greeting';
+  if (q.length < 10 && q.match(/(hi|hello|hey|yo|sup)/)) return 'greeting';
+
+  // Casual conversational / general knowledge — route to simple ChatGPT handler
+  if (q.match(/joke|funny|laugh|humor|riddle|pun|meme/)) return 'random_chat';
+  if (q.match(/who (is|was|are)|what is|what are|what was|what were|tell me about|explain|define|meaning of|definition/)) {
+    if (!q.match(/career|job|resume|skill|learn|interview|roadmap|salary|domain|role/)) return 'random_chat';
+  }
+  if (q.match(/capital of|president of|prime minister|population of|currency of|language of|flag of/)) return 'random_chat';
+  if (q.match(/how (to|do|does|can|did|many|much|old|long|far|big|small)|when (did|was|is|are)/)) {
+    if (!q.match(/career|job|resume|skill|learn|interview|roadmap|salary/)) return 'random_chat';
+  }
+  if (q.match(/fact|trivia|did you know|fun fact|true or false|quiz me|history|science|math|calculate|solve|equation/)) return 'random_chat';
+  if (q.match(/recommend (a |me |some )?(movie|book|song|show|series|game|food|restaurant|place|travel)/)) return 'random_chat';
+  if (q.match(/weather|news|sports|cricket|football|today|time|date|year|season/)) return 'random_chat';
+  if (q.match(/thank|thanks|ty|thx|great|awesome|cool|nice|good|ok|okay|sure|alright|got it|understood|perfect|wow|amazing|wonderful/)) return 'greeting';
+  if (q.match(/who are you|what are you|are you (an? )?(ai|bot|robot|assistant|chatbot)|your name|introduce yourself/)) return 'random_chat';
+
+  // Career-specific intents
+  if (q.match(/roadmap|plan|path|schedule|week|day by day|step by step/)) return 'roadmap';
+  if (q.match(/skill|learn|improve|study|language|framework|tool|technology|what to learn/)) return 'skills';
+  if (q.match(/reject|rejection|why.*(not|fail)|not getting|no callback|ghosted/)) return 'rejection';
+  if (q.match(/resume|cv|portfolio|profile|linkedin/)) return 'resume';
+  if (q.match(/interview|prepare|question|mock|practice|hr round/)) return 'interview';
+  if (q.match(/salary|pay|package|compensation|ctc|lpa/)) return 'salary';
+  if (q.match(/job|apply|application|search|find|compan[y|ay]|hire/)) return 'job_search';
+  if (q.match(/weak|gap|missing|lack|strength|weakness/)) return 'gaps';
+  if (q.match(/project|build|develop|create|make/)) return 'projects';
+  if (q.match(/role|profe[s|ss]ion|backg[r|ro]ound/)) return 'general';
+
+  // Default: treat as general/conversational
+  return 'random_chat';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Structured fallback when Gemini is unavailable
 // ─────────────────────────────────────────────────────────────────────────────
 function buildFallback(role, score, gaps, skills) {
-  const gap = gaps[0] || 'the required skills';
-  const gap2 = gaps[1] || gap;
-  const skill = skills?.[0] || 'your existing skills';
+  const gap = gaps[0] || 'technical skills';
+  const gap2 = gaps[1] || 'industry tools';
+  const skill = skills?.[0] || 'core foundation';
+  
+  const insights = [
+    `Your readiness for ${role} is at ${score}%, primarily held back by ${gap}.`,
+    `To hit the competitive bar for ${role}, we need to boost your ${score}% score by focusing on ${gap}.`,
+    `Current analysis shows a ${score}% match. The biggest gap between you and a hire is ${gap}.`
+  ];
+  
+  const reasons = [
+    `Market data for ${role} roles shows ${gap} is a mandatory requirement in 90% of job descriptions. Your score of ${score}% suggests your resume might be filtered out by ATS systems looking for this specific skill.`,
+    `While you have a solid start with ${skill}, top-tier companies hiring for ${role} prioritize ${gap} and ${gap2}. Without these, your ${score}% readiness makes it harder to secure interviews.`,
+    `ATS optimization is key. Since ${gap} is missing, your profile ranks lower for ${role} positions. Improving this will drastically change your callback rate.`
+  ];
+
+  const actionPool = [
+    `Master ${gap} basics using freeCodeCamp or YouTube tutorials.`,
+    `Build a mini-project that integrates ${gap} with your current ${skill} knowledge.`,
+    `Update your LinkedIn profile with keywords for ${gap} and ${gap2}.`,
+    `Reach out to a ${role} professional for a quick networking chat.`,
+    `Practice 3 coding challenges related to ${gap} on LeetCode.`,
+    `Refactor your latest project to include ${gap2} best practices.`
+  ];
+
+  // Shuffle and pick
+  const shuffledActions = actionPool.sort(() => 0.5 - Math.random()).slice(0, 5);
+
   return {
-    insight: `Your ${score}% readiness score is the primary blocker for ${role} roles — specifically the missing ${gap} skill.`,
-    reason: `Analysis of ${role} job postings shows ${gap} appears in 89% of requirements. Your current score of ${score}% places you below the competitive threshold. Recruiters use ATS systems that filter resumes before human review, and missing key skills like ${gap} and ${gap2} triggers automatic rejection. Your strength in ${skill} is a solid foundation, but insufficient alone.`,
-    actions: [
-      `Complete a structured ${gap} course (aim for 20 hours over 2 weeks)`,
-      `Build one end-to-end project demonstrating ${gap} and add it to your GitHub`,
-      `Update your resume with ${gap}-related keywords and quantified achievements`,
-      `Network with 3 ${role} professionals on LinkedIn this week`,
-      `Practice explaining your ${skill} projects in interview format`
-    ],
+    insight: insights[Math.floor(Math.random() * insights.length)],
+    reason: reasons[Math.floor(Math.random() * reasons.length)],
+    actions: shuffledActions,
     roadmap: [
-      `Day 1-2 [Beginner | 3 hrs | ${gap}]: Start ${gap} fundamentals with a crash course (YouTube or Coursera free tier)`,
-      `Day 3-4 [Beginner | 4 hrs | ${gap}]: Complete 10+ practice exercises to solidify core ${gap} concepts`,
-      `Day 5-6 [Intermediate | 5 hrs | ${gap}]: Build a mini project combining ${gap} with ${skill}`,
-      `Day 7 [Intermediate | 2 hrs | ${gap2}]: Start ${gap2} basics and connect it to your ${gap} project`,
-      `Week 2 [Intermediate | 8 hrs | Project]: Polish your project, write documentation, deploy to GitHub`,
-      `Week 3 [Advanced | 4 hrs | Career]: Update resume, tailor for 5 ${role} postings, submit applications`,
-      `Week 4 [Advanced | 3 hrs | Interview]: Do 3 mock interviews focusing on ${gap} and ${gap2} scenarios`
+      `Week 1: Focus on ${gap} fundamentals and setup.`,
+      `Week 2: Build a small implementation using ${gap}.`,
+      `Week 3: Deep dive into ${gap2} and integration.`,
+      `Week 4: Finalize a portfolio project and update your resume.`
     ],
-    today_task: `Set up your ${gap} learning environment and complete the first module of a structured course (target: 2-3 hours)`
+    today_task: `Spend 1 hour researching the most popular ${gap} resources on GitHub or YouTube.`,
+    chat_summary: `You've got a strong base in ${skill}. Focus on ${gap} and you'll see your readiness score climb fast!`
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/ai-mentor — Production AI Career Mentor
-// Body: { userData: { role, score, skills[], gaps[] }, question: string }
+// POST /api/ai-mentor — Smart AI Career Mentor (Intent-Aware + Resume-Personalized)
+// Body: { userData: { role, score, skills[], gaps[], projects[], experience_years }, question }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/ai-mentor', async (req, res) => {
   const startTime = Date.now();
@@ -112,86 +324,206 @@ app.post('/api/ai-mentor', async (req, res) => {
     const { userData, question, conversationHistory = [] } = req.body;
 
     if (!userData || !question) {
-      return res.status(400).json({
-        error: 'Missing required fields: userData (role, score, skills, gaps) and question'
-      });
+      return res.status(400).json({ error: 'Missing userData or question' });
     }
 
-    const { 
-      role = 'Software Developer', 
-      score = 50, 
-      gaps = [], 
+    const {
+      role = 'Software Developer',
+      domain = 'General',
+      level = 'Professional',
+      score = 50,
+      gaps = [],
       skills = [],
       projects = [],
       experience_years = 0
     } = userData;
 
-    console.log(`\n[AI-MENTOR] Role:${role} | Score:${score} | Skills:${skills.join(',')} | Gaps:${gaps.join(',')} | Q:"${question.slice(0, 60)}"`);
+    const intent = detectIntent(question);
+    console.log(`\n[AI-MENTOR] Intent:${intent} | Role:${role} | Score:${score}% | Skills:[${skills.slice(0,5).join(',')}] | Gaps:[${gaps.join(',')}]`);
+    console.log(`[AI-MENTOR] Q: "${question.slice(0, 80)}"`);        
 
-    // ── Build the system prompt (STRUCTURED JSON SYSTEM) ──────────
-    const prompt = `You are a highly intelligent Career Mentor AI. You provide data-backed, practical advice based on the user's real resume data.
+    // ─── Intent-specific instruction blocks ──────────────────────────────────
+    const intentGuide = {
+      roadmap: `
+FOCUS: Generate a DETAILED, PERSONALIZED learning roadmap.
+- Base it on their ACTUAL skills (${skills.join(', ')}) and gaps (${gaps.join(', ')}).
+- Cover at least 6 weeks with daily hour estimates.
+- Include free resource names (Coursera, YouTube channel names, freeCodeCamp, LeetCode, etc.).
+- Each roadmap entry must follow: "Week N [Level | X hrs | Topic]: What to do".`,
 
-CONTEXT — REAL DATA ONLY (Do not hallucinate):
-- Target Role: ${role}
-- Readiness Score: ${score}/100
-- Years Experience: ${experience_years}
-- Current Skills: ${skills.length > 0 ? skills.join(', ') : 'None provided'}
-- Critical Skill Gaps: ${gaps.length > 0 ? gaps.join(', ') : 'None identified'}
-- Projects: ${projects.length > 0 ? projects.map(p => p.title + ' (' + p.tools.join(',') + ')').join('; ') : 'No projects extracted'}
-- Conversation History: ${JSON.stringify(conversationHistory)}
+      greeting: `
+FOCUS: Respond to a simple greeting.
+- Be extremely brief.
+- Just say hello and ask how you can help with their career or resume analysis.
+- DO NOT give career advice yet. Wait for a specific question.`,
 
-RULES:
-1. Use real user data (skills, gaps, score).
-2. No hallucination. Never assume skills they don't have.
-3. No generic advice.
-4. Always return structured JSON.
-5. Provide a practical real-world roadmap.
+      skills: `
+FOCUS: Recommend SPECIFIC skills/languages/frameworks to learn.
+- Analyze their current stack: ${skills.join(', ')}.
+- Identify gaps for ${role}: ${gaps.join(', ')}.
+- Rank recommendations by industry demand and hiring frequency.
+- Mention WHY each skill matters for ${role} jobs in 2024-2025.
+- Include free learning platforms for each skill.`,
 
-Student's question: "${question}"
+      rejection: `
+FOCUS: Diagnose WHY they are getting rejected and fix it.
+- Their readiness score is ${score}/100 — explain what this means for ATS systems.
+- Identify which gaps (${gaps.join(', ')}) are causing the most rejections.
+- Suggest concrete resume/application changes.
+- Give ATS keyword optimization advice specific to ${role} roles.`,
 
-Respond with ONLY a valid JSON object matching this strict schema:
+      resume: `
+FOCUS: Give actionable resume improvement advice.
+- Analyze their projects: ${projects.map(p => p.title).join(', ') || 'none uploaded'}.
+- Suggest bullet point rewrites, keyword additions, and structure improvements.
+- Highlight which skills to feature most prominently for ${role}.
+- Advise on LinkedIn/GitHub profile optimization.`,
+
+      interview: `
+FOCUS: Give a targeted interview preparation plan.
+- Cover technical topics they'll be asked about (from their skills: ${skills.join(', ')}).
+- Cover gap topics they should prepare to explain (${gaps.join(', ')}).
+- Suggest 5+ specific practice questions for ${role} interviews.
+- Recommend mock interview resources (Pramp, interviewing.io, LeetCode).`,
+
+      salary: `
+FOCUS: Give realistic salary guidance for ${role} with their profile.
+- ${experience_years} years of experience, ${score}% job readiness.
+- Current skills: ${skills.join(', ')}.
+- Explain salary ranges by tier (fresher, 2-3 yrs, senior) for ${role}.
+- Advise on how to negotiate and what skills would increase their package.`,
+
+      job_search: `
+FOCUS: Give a smart, personalized job search strategy.
+- Which companies to target based on their stack (${skills.join(', ')}).
+- Which job portals and strategies work best for ${role} in India/global.
+- How to tailor applications for each job posting.
+- Cold email/LinkedIn outreach templates.`,
+
+      gaps: `
+FOCUS: Deep dive into their skill gaps and how to close them fast.
+- Gaps identified: ${gaps.join(', ')}.
+- Prioritize by hiring frequency for ${role}.
+- Give a realistic timeline to close each gap.
+- Recommend the single best resource per gap.`,
+
+      projects: `
+FOCUS: Suggest projects they should build to strengthen their profile.
+- Based on their current skills: ${skills.join(', ')}.
+- Projects must demonstrate the missing skills: ${gaps.join(', ')}.
+- Suggest 3-4 portfolio projects with tech stack, complexity level, and deployment target.
+- Each project should directly address a real ${role} job requirement.`,
+
+      general: `
+FOCUS: Answer the user's question DIRECTLY with high-accuracy data.
+- If they ask for company recommendations, list top companies for their role (e.g., for Sales Manager: Salesforce, HubSpot, Oracle).
+- If they ask for advice, give specific, actionable steps.
+- Do NOT repeat that their score is low as the main answer. Answer the question FIRST.
+- Be concise, direct, and professional.`
+    };
+
+    // ─── GENERAL / RANDOM / GREETING — simple ChatGPT-style response ──────────
+    if (['greeting', 'random_chat', 'general'].includes(intent)) {
+      try {
+        const rawRes = await callAIRaw(question, conversationHistory);
+        if (rawRes && rawRes.text) {
+          console.log(`[AI-MENTOR] ✅ General Q by ${rawRes.provider}:${rawRes.model} in ${Date.now() - startTime}ms`);
+          return res.json({ 
+            insight: rawRes.text, 
+            reason: '', 
+            actions: [], 
+            roadmap: [], 
+            today_task: '', 
+            chat_summary: '',
+            meta: { role, model: `${rawRes.provider}:${rawRes.model}`, responseTime: Date.now() - startTime } 
+          });
+        }
+      } catch(e) {
+        console.error('[AI-MENTOR] Raw call failed:', e.message);
+      }
+      
+      // Secondary fallback to JSON-based call if raw fails
+      try {
+        const { parsed, model, provider } = await callAI(`Answer concisely: ${question}`, true);
+        return res.json({ ...parsed, meta: { role, model: `${provider}:${model}` } });
+      } catch(e) {
+        return res.json({ insight: "I'm here to help! You can ask me career questions or any general question.", reason: '', actions: [], roadmap: [], today_task: '', chat_summary: '' });
+      }
+    }
+
+    // ─── Master prompt (Career-specific questions) ────────────────────────────
+    const variationSeed = Date.now() % 1000;
+    const prompt = `You are SkillBridge AI — a highly specialized career mentor chatbot.
+STRICT OPERATIONAL MODE:
+1. ANSWER THE QUESTION DIRECTLY. If they ask for companies, GIVE COMPANIES. If they ask for tools, GIVE TOOLS.
+2. DO NOT just lecture the user about their low score.
+3. Use the User Profile data below only to TAILOR the answer, not to avoid answering.
+4. CRITICAL: Your advice must be SPECIFIC to the "${role}" role in the "${domain}" domain. Use real-world industry names.
+
+══════════════════════════════════════════════════════
+  USER PROFILE (Base all answers strictly on this)
+══════════════════════════════════════════════════════
+• Target Role         : ${role}
+• Professional Domain : ${domain}
+• Seniority Level     : ${level}
+• Job Readiness Score : ${score}/100
+• Experience          : ${experience_years} years
+• Detected Skills     : ${skills.join(', ') || 'None'}
+• Skill Gaps          : ${gaps.join(', ') || 'None'}
+• Projects            : ${projects.map(p => p.title).join(' | ') || 'None'}
+• History (Last 3)    : ${conversationHistory.slice(-3).map(h => `Q: ${h.user} -> AI: ${h.ai_insight || '...'}`).join(' | ') || 'New chat'}
+• Variation Seed      : ${variationSeed}
+══════════════════════════════════════════════════════
+
+QUESTION TYPE: ${intent.toUpperCase()}
+${intentGuide[intent] || intentGuide.general}
+
+══════════════════════════════════════════════════════
+STRICT OPERATIONAL RULES:
+1. ONLY USE REAL SKILLS from the list above.
+2. DO NOT REPEAT previous insights. Focus on new nuances of the current question.
+3. Every action and roadmap item must be UNIQUE and DIFFERENTly phrased.
+4. Mention REAL, specific platforms (e.g. "Take the 'JavaScript Basics' course on freeCodeCamp").
+5. Return ONLY valid JSON.
+══════════════════════════════════════════════════════
+
+Current Question: "${question}"
+
+JSON Schema:
 {
-  "insight": "One sharp analytical sentence combining their core issue and your strategic insight.",
-  "reason": "Explain WHY they are struggling. Connect gaps to hiring logic.",
-  "actions": ["Specific action 1", "Specific action 2", "Specific action 3"],
-  "roadmap": [
-    "Day 1-2: Learn fundamentals of missing skill",
-    "Day 3-5: Practice with a small project"
-  ],
-  "today_task": "One specific, concrete task the student must complete TODAY.",
-  "chat_summary": "Short explanation or supportive conversational summary of your advice."
+  "insight": "DIRECT 2-sentence answer.",
+  "reason": "Technical reasoning based on their profile.",
+  "actions": ["Specific actionable task 1", "Specific actionable task 2"],
+  "roadmap": ["Week 1: ...", "Week 2: ...", "Week 3: ..."],
+  "today_task": "Single highest priority task for today.",
+  "chat_summary": "Short professional wrap-up."
 }`;
 
     let aiResponse;
     let modelUsed = 'fallback';
 
-    if (genAI) {
-      try {
-        const { parsed, model } = await callGeminiSDK(prompt);
-        aiResponse = parsed;
-        modelUsed = model;
-        console.log(`[AI-MENTOR] ✅ Gemini responded in ${Date.now() - startTime}ms`);
-      } catch (e) {
-        console.warn('[AI-MENTOR] ⚠️ Gemini SDK failed, using fallback:', e.message);
-        aiResponse = buildFallback(role, score, gaps, skills);
-      }
-    } else {
-      console.warn('[AI-MENTOR] 🔴 No GEMINI_API_KEY — using structured fallback');
+    try {
+      const { parsed, model, provider } = await callAI(prompt, false);
+      aiResponse = parsed;
+      modelUsed = `${provider}:${model}`;
+      console.log(`[AI-MENTOR] ✅ ${provider} responded in ${Date.now() - startTime}ms`);
+    } catch (e) {
+      console.warn('[AI-MENTOR] ⚠️ All AI providers failed, using fallback:', e.message);
       aiResponse = buildFallback(role, score, gaps, skills);
     }
 
     // ── Validate and sanitize the response ──────────────────────────────────
-    const required = ['insight', 'reason', 'actions', 'roadmap', 'today_task', 'chat_summary'];
-    const missing = required.filter(k => !aiResponse[k]);
-    if (missing.length > 0) {
-      console.warn(`[AI-MENTOR] Response missing fields: ${missing.join(', ')} — patching with fallback`);
-      aiResponse.insight = aiResponse.insight || "Unable to analyze completely right now.";
-      aiResponse.reason = aiResponse.reason || "Temporary issue with full analysis.";
-      aiResponse.actions = Array.isArray(aiResponse.actions) && aiResponse.actions.length > 0 ? aiResponse.actions : ["Please try again"];
-      aiResponse.roadmap = Array.isArray(aiResponse.roadmap) && aiResponse.roadmap.length > 0 ? aiResponse.roadmap : ["Check back later"];
-      aiResponse.today_task = aiResponse.today_task || "Review your skills";
-      aiResponse.chat_summary = aiResponse.chat_summary || "Please try again.";
-    }
+    aiResponse = aiResponse || {};
+    
+    // For greetings or general chats, do not force strict career fallbacks
+    const isGeneral = ['greeting', 'general', 'random_chat'].includes(intent);
+    
+    aiResponse.insight = aiResponse.insight || (isGeneral ? "Hello! How can I assist with your career today?" : "Unable to analyze completely right now.");
+    aiResponse.reason = aiResponse.reason || (isGeneral ? "" : "Temporary issue with full analysis.");
+    aiResponse.actions = Array.isArray(aiResponse.actions) ? aiResponse.actions : (isGeneral ? [] : ["Please try again"]);
+    aiResponse.roadmap = Array.isArray(aiResponse.roadmap) ? aiResponse.roadmap : (isGeneral ? [] : ["Check back later"]);
+    aiResponse.today_task = aiResponse.today_task || (isGeneral ? "" : "Review your skills");
+    aiResponse.chat_summary = aiResponse.chat_summary || "";
 
     return res.json({
       ...aiResponse,
@@ -208,14 +540,10 @@ Respond with ONLY a valid JSON object matching this strict schema:
 
   } catch (err) {
     console.error('[AI-MENTOR ERROR]', err.message);
-    return res.status(500).json({
-      insight: 'Unable to analyze',
-      reason: 'Temporary issue',
-      actions: [],
-      roadmap: [],
-      today_task: '',
-      chat_summary: 'Please try again',
-      meta: { error: true, message: err.message, timestamp: Date.now() }
+    const fallback = buildFallback(role, score, gaps, skills);
+    return res.json({
+      ...fallback,
+      meta: { error: true, message: 'Fallback active', timestamp: Date.now() }
     });
   }
 });
@@ -577,12 +905,43 @@ app.post('/api/resume/parse', upload.single('resume'), async (req, res) => {
 
     console.log(`[RESULT] Skills:${skills.length} | Projects:${projects.length} | Exp:${experience_years}yrs`);
 
+    let aiInsights = { role: 'Professional', domain: 'General', level: 'Entry', top_skills: [] };
+    try {
+      const prompt = `Analyze the following resume text and provide the candidate's target role, domain (e.g. Technical, Non-Technical, Medical, Finance, Student, etc.), experience level (e.g. Student, Junior, Mid-Level, Senior), and an array of their 5 most prominent skills (e.g. ['Marketing', 'SEO', 'Leadership']).
+      
+      Resume text (first 2500 chars): ${rawText.slice(0, 2500)}
+
+      Return ONLY a JSON object with these keys: "role", "domain", "level", "top_skills" (array of strings).`;
+      const aiResponse = await callAI(prompt, true); // use fast model
+      if (aiResponse && aiResponse.parsed) {
+        aiInsights = {
+          role: aiResponse.parsed.role || aiInsights.role,
+          domain: aiResponse.parsed.domain || aiInsights.domain,
+          level: aiResponse.parsed.level || aiInsights.level,
+          top_skills: Array.isArray(aiResponse.parsed.top_skills) ? aiResponse.parsed.top_skills : []
+        };
+      }
+    } catch (e) {
+      console.warn("[AI CLASSIFICATION FAILED]", e.message);
+    }
+
+    // Merge AI extracted skills with regex skills if regex missed non-technical skills
+    const mergedSkills = [...skills];
+    aiInsights.top_skills.forEach(sk => {
+      if (!mergedSkills.some(s => s.name.toLowerCase() === sk.toLowerCase())) {
+        mergedSkills.push({ name: sk, occurrences: 1, confidence: 'high' });
+      }
+    });
+
     return res.json({
-      skills,
+      skills: mergedSkills,
       projects,
       education: null,
       experience_years,
       links,
+      role: aiInsights.role,
+      domain: aiInsights.domain,
+      level: aiInsights.level,
       rawTextPreview: rawText.slice(0, 300),
       timestamp: Date.now()
     });
@@ -594,58 +953,110 @@ app.post('/api/resume/parse', upload.single('resume'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/interview/generate — Generate AI Mock Interview Questions
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/interview/generate', async (req, res) => {
+  try {
+    const { profile, role = 'Software Developer', mode = 'normal' } = req.body;
+    if (!profile) return res.status(400).json({ error: 'No profile provided' });
+
+    let prompt;
+    
+    // Extract dynamic domain/level if available, default to generic fallbacks
+    const domain = profile.domain || 'Technical';
+    const level = profile.level || 'Professional';
+    const isTech = domain.toLowerCase().includes('tech') || domain.toLowerCase().includes('software') || domain.toLowerCase().includes('engineering');
+
+    if (mode === 'quiz') {
+      prompt = `You are a Senior ${domain} Examiner. Generate 20 highly challenging Multiple Choice Questions (MCQs) for a ${level} ${role}.
+      USER PROFILE: Skills: ${profile.skills?.join(', ')}, Gaps: ${profile.gaps?.join(', ')}.
+      
+      INSTRUCTIONS:
+      1. Focus heavily on testing their stated Skill Gaps, but also include questions that validate their core skills.
+      2. Each question must have 4 options (A, B, C, D).
+      3. Mark the 'correct_answer' precisely.
+      4. Provide a 'solution_explanation' for each question.
+      5. Ensure questions are deeply relevant to the ${domain} domain and appropriate for a ${level} level candidate.
+      6. CRITICAL: ALL 20 questions must be completely UNIQUE. Do not repeat questions, subtopics, or similar scenarios.
+
+      RETURN ONLY VALID JSON in this format:
+      {
+        "questions": [
+          { 
+            "id": 1, 
+            "category": "${domain} Fundamentals", 
+            "question": "...", 
+            "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
+            "correct_answer": "A) ...",
+            "solution_explanation": "...",
+            "hint": "..." 
+          }
+        ]
+      }`;
+    } else {
+      prompt = `You are an expert ${domain} interviewer. Generate 5 targeted, high-quality interview questions for a ${level} ${role}.
+      USER PROFILE: Skills: ${profile.skills?.join(', ')}, Gaps: ${profile.gaps?.join(', ')}.
+      
+      REQUIREMENTS:
+      1. Focus heavily on testing their Gaps.
+      2. Include 2 Behavioral/Situational questions relevant to the ${domain} industry.
+      3. ${isTech ? 'Include 1 System Design or Architecture question.' : `Include 1 scenario-based question testing core ${domain} problem-solving.`}
+      4. Calibrate the difficulty strictly for a ${level} candidate.
+      5. CRITICAL: ALL 5 questions must be completely UNIQUE and test different aspects of their profile. Do not repeat concepts.
+      
+      RETURN JSON: { "questions": [{ "id": 1, "category": "...", "question": "...", "hint": "..." }] }`;
+    }
+
+    const { parsed } = await callAI(prompt, true);
+    res.json({ questions: parsed?.questions || [] });
+  } catch (error) {
+    console.error('[INTERVIEW-GEN] Error:', error);
+    res.status(500).json({ error: 'Failed to generate questions' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/interview/evaluate — AI Mock Interview Evaluator
-// Body: { qaPairs: [{ question: string, answer: string, category: string }] }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/interview/evaluate', async (req, res) => {
   try {
-    const { qaPairs } = req.body;
-    if (!qaPairs || !Array.isArray(qaPairs)) {
-      return res.status(400).json({ error: 'Missing qaPairs array' });
-    }
+    const { qaPairs, profile } = req.body;
+    if (!qaPairs) return res.status(400).json({ error: 'Missing qaPairs' });
 
-    if (!genAI) {
-      return res.json({
-        evaluations: qaPairs.map(qa => ({
-          score: 50,
-          feedback: "Gemini API key is not configured. This is a fallback feedback.",
-          improvement: "Please configure your environment variables to receive real feedback."
-        }))
-      });
-    }
+    const domain = profile?.domain || 'Technical';
+    const level = profile?.level || 'Professional';
+    const isTech = domain.toLowerCase().includes('tech') || domain.toLowerCase().includes('software') || domain.toLowerCase().includes('engineering');
 
-    const prompt = `You are an expert technical and behavioral interview coach. 
-You will be provided with a set of questions and the candidate's answers.
-For each question, evaluate the candidate's answer based on the category (Technical, Behavioral, System Design).
+    const prompt = `You are a Senior ${domain} Manager and Expert Evaluator. Evaluate these interview responses with 100% precision.
+${profile ? `USER PROFILE: Level:${level}, Role:${profile.targetRole || profile.role}, Gaps:${profile.gaps?.join(',')}` : ''}
 
-Provide a valid JSON response exactly matching this schema:
+REFERENCE EXAMPLES FOR GRADING:
+- If the domain is highly Technical (like Software), expect precise definitions, code awareness, and structured architecture (e.g., STAR format).
+- If the domain is Non-Technical (like Marketing, Medical, or Student), grade based on clarity, domain-specific logic, communication, and situational problem-solving.
+- Grade strictly according to the expectations of a ${level} candidate. A 'Student' requires less depth than a 'Senior'.
+
+RESPONSES TO EVALUATE:
+${qaPairs.map((pair, i) => `Q${i+1} (${pair.category}): ${pair.question}\nAnswer: ${pair.answer}`).join('\n\n')}
+
+INSTRUCTIONS:
+1. Be highly critical but fair to their ${level} seniority. Only give 100 if the answer is completely exhaustive for their field.
+2. For MCQs: Strict 100 or 0.
+3. Provide the 'optimalSolution' (The industry-standard perfect response for a ${level} ${domain} professional).
+4. Provide 'solution_explanation' (The 'why').
+
+RETURN ONLY VALID JSON:
 {
   "evaluations": [
-    {
-      "score": number (0-100),
-      "feedback": "2-3 sentences evaluating what they did well and where they failed",
-      "improvement": "1 actionable sentence on how to phrase the answer better"
-    }
+    { "score": 85, "feedback": "...", "improvement": "...", "optimalSolution": "...", "solution_explanation": "..." },
+    ...
   ]
-}
+}`;
 
-Input Q&A Pairs:
-${JSON.stringify(qaPairs, null, 2)}
-`;
-
-    const { parsed, model } = await callGeminiSDK(prompt);
-    
-    // Ensure the array matches the length of input
-    let evals = parsed.evaluations || [];
-    if (evals.length !== qaPairs.length) {
-      console.warn('[INTERVIEW-EVAL] Returned array length mismatch. Patching...');
-      evals = qaPairs.map((_, i) => evals[i] || { score: 0, feedback: "Failed to evaluate.", improvement: "Try answering more clearly." });
-    }
-
-    return res.json({ evaluations: evals });
-  } catch (err) {
-    console.error('[INTERVIEW-EVAL ERROR]', err.message);
-    return res.status(500).json({ error: 'Evaluation failed' });
+    const { parsed } = await callAI(prompt);
+    res.json({ evaluations: parsed?.evaluations || [] });
+  } catch (error) {
+    console.error('[INTERVIEW-EVAL] Error:', error);
+    res.status(500).json({ error: 'Failed to evaluate' });
   }
 });
 
