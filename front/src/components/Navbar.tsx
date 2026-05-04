@@ -19,9 +19,11 @@ export default function Navbar() {
   const navLinks = [
     { label: 'Home', path: '/' },
     { label: 'Skill Analysis', path: '/skill-analysis' },
-    { label: 'Mentors', path: '/mentors' },
+    { label: 'AI Mentor', path: '/ai-mentor' },
+    { label: 'Mentors', path: '/mentors', special: 'solid' },
+    { label: 'Become a Mentor', path: '/become-mentor', special: 'outline' },
+    { label: 'Placements', path: '/placements' },
     { label: 'Mock Interview', path: '/mock-interview' },
-    { label: 'Profile', path: '/user-profile' },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -50,19 +52,23 @@ export default function Navbar() {
         </button>
 
         {/* Desktop Links */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden xl:flex items-center gap-1">
           {navLinks.map(link => (
             <button
               key={link.label}
               onClick={() => { navigate(link.path); setOpen(false); }}
-              className={`px-4 py-2 text-sm font-bold rounded-xl transition-all relative group ${
-                isActive(link.path) 
+              className={`px-3 py-2 text-xs font-bold rounded-xl transition-all relative group ${
+                link.special === 'solid' 
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200/50 hover:bg-emerald-600 ml-2' 
+                : link.special === 'outline'
+                ? 'border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 ml-1'
+                : isActive(link.path) 
                 ? 'text-emerald-600 bg-emerald-50/50' 
                 : 'text-slate-500 hover:text-slate-900'
               }`}
             >
               {link.label}
-              {!isActive(link.path) && (
+              {!isActive(link.path) && !link.special && (
                 <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-emerald-500 group-hover:w-4 transition-all duration-300 rounded-full" />
               )}
             </button>

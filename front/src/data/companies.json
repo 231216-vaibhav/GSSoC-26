@@ -1,0 +1,173 @@
+[
+  {
+    "id": 1,
+    "company": "Google",
+    "logo": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png",
+    "role": "Software Engineer (Frontend)",
+    "type": "Full Time",
+    "location": "Bangalore / Remote",
+    "salary": "35-45 LPA",
+    "required_skills": ["React", "TypeScript", "HTML", "CSS", "JavaScript", "Algorithms"],
+    "min_experience": 0,
+    "description": "Building the next generation of Google Search UI."
+  },
+  {
+    "id": 2,
+    "company": "Microsoft",
+    "logo": "https://img-prod-cms-rt-microsoft-com.akamaized.net/cms/api/am/imageFileData/RE1Mu3b?ver=5c31",
+    "role": "Full Stack Developer",
+    "type": "Full Time",
+    "location": "Hyderabad",
+    "salary": "30-40 LPA",
+    "required_skills": ["Java", "Spring Boot", "React", "Azure", "SQL"],
+    "min_experience": 2,
+    "description": "Work on the Azure Cloud platform and its core services."
+  },
+  {
+    "id": 3,
+    "company": "Amazon",
+    "logo": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg",
+    "role": "SDE-1",
+    "type": "Full Time",
+    "location": "Pune",
+    "salary": "28-35 LPA",
+    "required_skills": ["C++", "Java", "Python", "AWS", "Data Structures"],
+    "min_experience": 0,
+    "description": "Optimize logistics and delivery systems for global scale."
+  },
+  {
+    "id": 4,
+    "company": "Razorpay",
+    "logo": "https://razorpay.com/favicon.png",
+    "role": "Frontend Intern",
+    "type": "Internship",
+    "location": "Remote",
+    "salary": "45,000 per month",
+    "required_skills": ["React", "JavaScript", "Tailwind CSS", "Redux"],
+    "min_experience": 0,
+    "description": "Create seamless checkout experiences for millions of users."
+  },
+  {
+    "id": 5,
+    "company": "CRED",
+    "logo": "https://cred.club/assets/images/cred_logo.png",
+    "role": "Backend Engineer",
+    "type": "Full Time",
+    "location": "Bangalore",
+    "salary": "40-50 LPA",
+    "required_skills": ["Node.js", "Express", "MongoDB", "Redis", "Kafka"],
+    "min_experience": 3,
+    "description": "Build high-performance financial systems."
+  },
+  {
+    "id": 6,
+    "company": "Zepto",
+    "logo": "https://www.zeptonow.com/favicon.ico",
+    "role": "Mobile App Developer",
+    "type": "Full Time",
+    "location": "Mumbai",
+    "salary": "25-35 LPA",
+    "required_skills": ["React Native", "JavaScript", "Firebase", "iOS", "Android"],
+    "min_experience": 1,
+    "description": "Scaling 10-minute delivery to 100 cities."
+  },
+  {
+    "id": 7,
+    "company": "TCS",
+    "role": "Systems Engineer",
+    "type": "Full Time",
+    "location": "Chennai",
+    "salary": "7-12 LPA",
+    "required_skills": ["Java", "SQL", "HTML", "CSS", "Python"],
+    "min_experience": 0,
+    "description": "Enterprise software development for global banking clients."
+  },
+  {
+    "id": 8,
+    "company": "Infosys",
+    "role": "Associate Consultant",
+    "type": "Full Time",
+    "location": "Mysore",
+    "salary": "6-10 LPA",
+    "required_skills": [".NET", "C#", "SQL Server", "Angular"],
+    "min_experience": 0,
+    "description": "Digital transformation projects for Fortune 500 companies."
+  },
+  {
+    "id": 9,
+    "company": "Zomato",
+    "role": "UI/UX Developer",
+    "type": "Full Time",
+    "location": "Gurgaon",
+    "salary": "22-30 LPA",
+    "required_skills": ["Figma", "HTML", "CSS", "React", "Next.js"],
+    "min_experience": 2,
+    "description": "Crafting beautiful food ordering experiences."
+  },
+  {
+    "id": 10,
+    "company": "Swiggy",
+    "role": "Data Analyst",
+    "type": "Full Time",
+    "location": "Bangalore",
+    "salary": "18-24 LPA",
+    "required_skills": ["Python", "Pandas", "SQL", "Tableau", "Statistics"],
+    "min_experience": 1,
+    "description": "Unlocking insights from millions of daily transactions."
+  },
+  {
+    "id": 11,
+    "company": "Flipkart",
+    "role": "DevOps Engineer",
+    "type": "Full Time",
+    "location": "Bangalore",
+    "salary": "30-42 LPA",
+    "required_skills": ["Docker", "Kubernetes", "Jenkins", "Terraform", "Linux"],
+    "min_experience": 2,
+    "description": "Managing the infrastructure for India's largest e-commerce site."
+  },
+  {
+    "id": 12,
+    "company": "PhonePe",
+    "role": "Quality Assurance Engineer",
+    "type": "Full Time",
+    "location": "Pune",
+    "salary": "15-22 LPA",
+    "required_skills": ["Selenium", "Java", "JUnit", "Playwright", "Testing"],
+    "min_experience": 1,
+    "description": "Ensuring the reliability of digital payments."
+  },
+  {
+    "id": 13,
+    "company": "InMobi",
+    "role": "Ad-Tech Engineer",
+    "type": "Full Time",
+    "location": "Bangalore",
+    "salary": "25-35 LPA",
+    "required_skills": ["Go", "Distributed Systems", "NoSQL", "Docker"],
+    "min_experience": 2,
+    "description": "Optimizing real-time bidding algorithms."
+  },
+  {
+    "id": 14,
+    "company": "Unacademy",
+    "role": "Backend Intern",
+    "type": "Internship",
+    "location": "Remote",
+    "salary": "35,000 per month",
+    "required_skills": ["Node.js", "Express", "PostgreSQL", "Git"],
+    "min_experience": 0,
+    "description": "Building tools for the future of online education."
+  },
+  {
+    "id": 15,
+    "company": "Freshworks",
+    "role": "Full Stack Developer",
+    "type": "Full Time",
+    "location": "Chennai",
+    "salary": "20-28 LPA",
+    "required_skills": ["Ruby on Rails", "React", "PostgreSQL", "Redis"],
+    "min_experience": 1,
+    "description": "Scaling CRM solutions for small businesses worldwide."
+  }
+]

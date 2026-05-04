@@ -205,18 +205,22 @@ const QUICK_ACTIONS = [
   { id: 'reject', icon: AlertCircle, label: 'Why am I getting rejected?', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
   { id: 'next', icon: TrendingUp, label: 'What should I learn next?', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
   { id: 'roadmap', icon: Map, label: 'Generate my roadmap', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
-  { id: 'weakness', icon: Brain, label: 'Explain my weaknesses', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
   { id: 'resume', icon: FileText, label: 'Improve my resume', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
+  { id: 'weakness', icon: Brain, label: 'Explain my weaknesses', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
   { id: 'interview', icon: MessageSquare, label: 'Prep for interview', color: 'text-emerald-600', bg: 'bg-white hover:bg-slate-50 border-slate-200' },
 ];
 
-const ACTION_PROMPTS: Record<string, string> = {
-  reject: 'Why am I getting rejected from job applications?',
-  next: 'What skills should I learn next to become a better candidate?',
-  roadmap: 'Generate a detailed learning roadmap for my target role',
-  weakness: 'Explain my weaknesses based on my profile and skill gaps',
-  resume: 'How can I improve my resume to get more callbacks?',
-  interview: 'How should I prepare for interviews for my target role?',
+const getActionPrompt = (id: string, role: string, skills: string[]) => {
+  const skillsList = skills.slice(0, 8).join(', ');
+  switch (id) {
+    case 'reject': return `Analyze my resume skills vs current job market for ${role}. List exact skill gaps causing rejections. Be very specific.`;
+    case 'next': return `Based on my skills [${skillsList}], give me top 3 things to learn with resources and realistic timeline.`;
+    case 'roadmap': return `Create a 90-day learning roadmap for ${role} based on my current skills. Give week by week plan with specific resources.`;
+    case 'resume': return `Review my resume and give 5 specific improvements with before and after examples for each point.`;
+    case 'weakness': return `Explain my weaknesses based on my profile and skill gaps for ${role}`;
+    case 'interview': return `How should I prepare for interviews for ${role}?`;
+    default: return '';
+  }
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -338,6 +342,25 @@ function AIMessage({ item }: { item: ConversationItem }) {
                   </div>
                 </div>
               )}
+
+              {/* Mentor Suggestion Card */}
+              <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 text-white shadow-lg shadow-emerald-200 mt-4 border border-white/20">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                    <User size={14} className="text-white" />
+                  </div>
+                  <h4 className="font-bold text-sm">Want personalized guidance?</h4>
+                </div>
+                <p className="text-xs text-emerald-50 mb-4 opacity-90">
+                  Connect with a real industry mentor from Google or Amazon for a 1-on-1 session.
+                </p>
+                <button 
+                  onClick={() => window.location.href = '/mentors'}
+                  className="w-full py-2 bg-white text-emerald-600 rounded-xl text-xs font-bold hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  Find a Mentor <ChevronRight size={14} />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -497,11 +520,16 @@ export default function Mentors() {
     setActiveAction(actionId || null);
     setCustomInput('');
 
+    // If it's a quick action, use the specialized prompt
+    let finalPrompt = question;
+    if (actionId) {
+      finalPrompt = getActionPrompt(actionId, targetRole, profile.skills);
+    }
+
     // ⚡ CRITICAL FIX: Always inject the live targetRole from state into profile
-    // This prevents the stale closure bug where profile.targetRole lags behind the dropdown
     const currentProfile = { ...profile, targetRole };
 
-    const response = await callAIMentor(currentProfile, question, conversations);
+    const response = await callAIMentor(currentProfile, finalPrompt, conversations);
     setConversations(prev => [...prev, { question, response, timestamp: new Date() }]);
     setLoading(false);
     setActiveAction(null);
@@ -623,7 +651,7 @@ export default function Mentors() {
                 {QUICK_ACTIONS.map(action => (
                   <button
                     key={action.id}
-                    onClick={() => askQuestion(ACTION_PROMPTS[action.id], action.id)}
+                    onClick={() => askQuestion(action.label, action.id)}
                     disabled={loading}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm text-left transition-all disabled:opacity-40 ${action.bg}`}
                   >
@@ -674,13 +702,13 @@ export default function Mentors() {
                     I'm your AI career chatbot. I use your resume data to give you the most accurate advice.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md px-4">
-                    {['Why am I getting rejected?', 'What should I learn next?', 'Generate my roadmap', 'Improve my resume'].map(q => (
+                    {QUICK_ACTIONS.slice(0, 4).map(action => (
                       <button
-                        key={q}
-                        onClick={() => askQuestion(q)}
+                        key={action.id}
+                        onClick={() => askQuestion(action.label, action.id)}
                         className="text-xs text-left bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 rounded-xl px-4 py-3 transition-all flex items-center justify-between"
                       >
-                        {q} <ChevronRight size={12} className="text-slate-300" />
+                        {action.label} <ChevronRight size={12} className="text-slate-300" />
                       </button>
                     ))}
                   </div>

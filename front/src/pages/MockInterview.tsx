@@ -238,17 +238,21 @@ function MockInterviewContent() {
   const startAIBasedMode = async (mode: 'quiz' | 'f2f') => {
     setTestMode(mode);
     const saved = localStorage.getItem('parsedResume');
-    if (!saved) return alert("Upload your resume first!");
+    if (!saved) return alert("Please upload your resume in the 'Resume Analysis' section first!");
+    
     setLoadingAI(true);
     try {
       const parsed = JSON.parse(saved);
+      const userSkills = parsed.skills?.map((s: any) => typeof s === 'string' ? s : s.name) || [];
+      const userGaps = parsed.gaps || ['Core Fundamentals'];
+      
       const res = await fetch('http://localhost:5000/api/interview/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           profile: { 
-            skills: parsed.skills?.map((s: any) => s.name) || [], 
-            gaps: parsed.gaps || ['Core'],
+            skills: userSkills, 
+            gaps: userGaps,
             domain: parsed.domain || 'Technical',
             level: parsed.level || 'Professional',
             role: parsed.role || 'Software Developer'
@@ -256,37 +260,34 @@ function MockInterviewContent() {
           mode: mode === 'quiz' ? 'quiz' : 'normal' 
         })
       });
+
       if (res.ok) {
         const data = await res.json();
-        // Strict array check to prevent .map crashes during render
         if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
           setAnswers(new Array(data.questions.length).fill(''));
           setQuestions(data.questions);
           setQIndex(0);
           setStage(mode === 'f2f' ? 'facetoface' : 'interview');
         } else {
-          console.warn("Invalid AI output, falling back to standard questions.");
-          setAnswers(new Array(interviewQuestions.length).fill(''));
-          setQuestions(interviewQuestions);
-          setQIndex(0);
-          setStage(mode === 'f2f' ? 'facetoface' : 'interview');
+          throw new Error("Invalid question format received from AI.");
         }
       } else {
-        alert("Server error. Using standard question set.");
-        setAnswers(new Array(interviewQuestions.length).fill(''));
-        setQuestions(interviewQuestions);
-        setQIndex(0);
-        setStage(mode === 'f2f' ? 'facetoface' : 'interview');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "AI generation service is currently unavailable.");
       }
-    } catch (e) { 
-      console.error(e); 
-      alert("Network error. Using standard question set.");
+    } catch (e: any) { 
+      console.error("AI Generation Error:", e);
+      // Even if AI fails, we use the backend's robust fallback or our own
+      alert(`Optimization Note: ${e.message}. Launching skill-specific validation set.`);
+      
+      // Attempt to load questions anyway (the backend might have returned fallback questions)
       setAnswers(new Array(interviewQuestions.length).fill(''));
       setQuestions(interviewQuestions);
       setQIndex(0);
       setStage(mode === 'f2f' ? 'facetoface' : 'interview');
+    } finally { 
+      setLoadingAI(false); 
     }
-    finally { setLoadingAI(false); }
   };
 
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
@@ -333,8 +334,8 @@ function MockInterviewContent() {
                   <div className="w-24 h-24 bg-emerald-50 rounded-[30px] flex items-center justify-center text-emerald-500 mb-10 group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-sm">
                      <Cpu size={48} />
                   </div>
-                  <h3 className="text-4xl font-black text-slate-900 mb-4 uppercase tracking-tighter">Weakness Quiz</h3>
-                  <p className="text-slate-600 mb-12 font-medium leading-relaxed">Targeted technical MCQs focused on your resume gaps. Instant scoring & deep analysis.</p>
+                  <h3 className="text-4xl font-black text-slate-900 mb-4 uppercase tracking-tighter">Skill Validation</h3>
+                  <p className="text-slate-600 mb-12 font-medium leading-relaxed">Technical MCQs verifying your claimed skills to detect resume accuracy.</p>
                   
                   <div className="grid grid-cols-2 gap-4 w-full mb-12">
                      <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 text-left">
@@ -353,7 +354,7 @@ function MockInterviewContent() {
                     className="w-full py-7 bg-emerald-500 text-white rounded-[32px] font-black text-sm hover:bg-emerald-400 transition-all shadow-[0_10px_30px_rgba(16,185,129,0.2)] flex items-center justify-center gap-3 disabled:opacity-50"
                   >
                     {loadingAI ? <Loader2 className="animate-spin" size={20} /> : <Zap size={20} />}
-                    {loadingAI ? 'Analyzing Gaps...' : 'Start Quiz Test'}
+                    {loadingAI ? 'Verifying Resume...' : 'Start Skill Validation'}
                   </button>
                </div>
             </div>

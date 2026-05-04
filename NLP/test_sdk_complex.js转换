@@ -1,0 +1,19 @@
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+async function test() {
+  const genAI = new GoogleGenerativeAI("AIzaSyBOm7iiSD7uBuhP2UEA-v5hEr7qQMn7Ano");
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-flash-latest",
+    systemInstruction: "You are a career mentor. Return JSON ONLY."
+  });
+  const prompt = `User Skills: HTML, CSS. Target Role: Software Developer. Question: what companies should i target ?? 
+  Return JSON: {"insight": "...", "reason": "...", "actions": [], "roadmap": [], "today_task": "", "chat_summary": ""}`;
+  
+  try {
+    const result = await model.generateContent(prompt);
+    console.log("SUCCESS:", result.response.text());
+  } catch (err) {
+    console.error("FAILURE:", err.message);
+  }
+}
+test();

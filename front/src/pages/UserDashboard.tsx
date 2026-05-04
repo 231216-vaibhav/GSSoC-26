@@ -12,9 +12,20 @@ import {
   LayoutDashboard,
   LogOut,
   Bell,
-  Search
+  Search,
+  Building2,
+  ArrowRight,
+  Briefcase,
+  Star
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import React from 'react';
+import { companiesData } from '../data/companies';
+import { calculateJobMatches } from '../utils/matchingEngine';
+import mentorsDataRaw from '../data/mentors.json';
+import { Mentor, matchMentors } from '../utils/mentorMatching';
+
+const mentorsData = Array.isArray(mentorsDataRaw) ? mentorsDataRaw : ((mentorsDataRaw as any).default || []);
 
 export default function UserDashboard() {
   const navigate = useNavigate();
@@ -27,12 +38,24 @@ export default function UserDashboard() {
     }
   }, []);
 
+  const jobMatches = useMemo(() => {
+    if (!profile) return [];
+    return calculateJobMatches(profile.skills || [], companiesData, profile.experience_years || 0).slice(0, 3);
+  }, [profile]);
+
+  const mentorMatches = useMemo(() => {
+    const skills = (profile?.skills || []).map((s: any) => typeof s === 'string' ? s : s.name);
+    if (!profile) return (mentorsData as Mentor[]).slice(0, 3);
+    const matched = matchMentors(skills, profile.role || '', mentorsData as Mentor[]);
+    return matched.slice(0, 3);
+  }, [profile]);
+
   const navItems = [
     { icon: LayoutDashboard, label: 'Overview', path: '/dashboard', active: true },
     { icon: BrainCircuit, label: 'Skill Analysis', path: '/skill-analysis' },
     { icon: Users, label: 'Mentors', path: '/mentors' },
     { icon: MessageSquare, label: 'Mock Interview', path: '/mock-interview' },
-    { icon: BarChart3, label: 'Placements', path: '/placements' },
+    { icon: Briefcase, label: 'Placements', path: '/placements' },
   ];
 
   const tools = [
@@ -63,10 +86,10 @@ export default function UserDashboard() {
     {
       title: 'Placements',
       desc: 'Access placement analytics and campus stats.',
-      icon: BarChart3,
+      icon: Briefcase,
       color: 'bg-emerald-600',
       path: '/placements',
-      stats: '120+ Active'
+      stats: `${companiesData.length}+ Active`
     }
   ];
 
@@ -76,7 +99,7 @@ export default function UserDashboard() {
       {/* ─── SIDEBAR ────────────────────────────────────────────────────────── */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col fixed h-screen z-20">
         <div className="p-8 flex items-center gap-3">
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-black">S</div>
+          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-black shadow-lg shadow-emerald-200">S</div>
           <span className="font-black text-slate-900 tracking-tighter text-xl">SkillBridge</span>
         </div>
 
@@ -106,7 +129,7 @@ export default function UserDashboard() {
       </aside>
 
       {/* ─── MAIN CONTENT ───────────────────────────────────────────────────── */}
-      <main className="flex-1 lg:ml-64 p-4 lg:p-10">
+      <main className="flex-1 lg:ml-64 p-4 lg:p-10 pb-24">
         
         {/* Header */}
         <header className="flex items-center justify-between mb-10">
@@ -174,7 +197,7 @@ export default function UserDashboard() {
 
         {/* Section Navigation Cards */}
         <h2 className="text-xl font-black text-slate-900 mb-6 tracking-tight">Quick Access Tools</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {tools.map((tool) => (
             <button
               key={tool.title}
@@ -192,6 +215,108 @@ export default function UserDashboard() {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Top Matches Preview */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* Job Matches */}
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Top Job Matches</h3>
+                <p className="text-xs font-medium text-slate-400 italic">Based on your extracted skills</p>
+              </div>
+              <button onClick={() => navigate('/placements')} className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1">
+                View All <ChevronRight size={14} />
+              </button>
+            </div>
+            
+            {jobMatches.length > 0 ? (
+              <div className="space-y-4">
+                {jobMatches.map((job) => (
+                  <div key={job.id} className="group flex items-center gap-4 p-4 bg-slate-50 hover:bg-emerald-50/50 rounded-2xl border border-slate-100 hover:border-emerald-100 transition-all cursor-pointer" onClick={() => navigate('/placements')}>
+                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center p-2 border border-slate-100 group-hover:scale-110 transition-transform">
+                      {job.logo ? (
+                        <img src={job.logo} alt="" className="w-full h-full object-contain" />
+                      ) : (
+                        <Building2 size={20} className="text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-black text-slate-900 leading-tight">{job.role}</h4>
+                      <p className="text-[11px] font-bold text-slate-500">{job.company}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-sm font-black ${job.matchScore >= 70 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                        {job.matchScore}%
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Match</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-10 text-center bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                 <p className="text-slate-400 font-bold text-sm">Upload resume to see matches</p>
+              </div>
+            )}
+          </div>
+
+          {/* Mentor Matches */}
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Top Mentor Matches</h3>
+                <p className="text-xs font-medium text-slate-400 italic">Experts who can guide you</p>
+              </div>
+              <button onClick={() => navigate('/mentors')} className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1">
+                View All <ChevronRight size={14} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {mentorMatches.map((mentor) => (
+                <div key={mentor.id} className="group flex items-center gap-4 p-4 bg-slate-50 hover:bg-emerald-50/50 rounded-2xl border border-slate-100 hover:border-emerald-100 transition-all cursor-pointer" onClick={() => navigate(`/mentors/${mentor.id}`)}>
+                  <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center border border-slate-100 group-hover:scale-110 transition-transform overflow-hidden shadow-sm">
+                    <img src={mentor.photo} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-black text-slate-900 leading-tight">{mentor.name}</h4>
+                    <p className="text-[11px] font-bold text-slate-500">{mentor.company}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Star size={10} className="text-amber-400 fill-amber-400" />
+                      <span className="text-[10px] font-bold text-slate-700">{mentor.rating}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-sm font-black ${(mentor.matchScore || 0) >= 70 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                      {mentor.matchScore || 0}%
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Match</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[40px] text-white flex flex-col justify-between relative overflow-hidden shadow-2xl">
+            <div className="absolute -right-10 -bottom-10 p-10 opacity-10">
+              <BarChart3 size={200} />
+            </div>
+            <div className="relative z-10">
+              <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
+                <TrendingUp size={24} />
+              </div>
+              <h3 className="text-2xl font-black mb-4 leading-tight">Placement <br /> Analytics</h3>
+              <p className="text-slate-400 text-sm font-medium mb-8">See how you rank against other candidates applying for similar roles.</p>
+              <button 
+                onClick={() => navigate('/placements')}
+                className="w-full bg-white text-slate-900 font-black px-6 py-4 rounded-2xl shadow-xl hover:bg-emerald-500 hover:text-white transition-all text-sm flex items-center justify-center gap-2"
+              >
+                View Insights <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Action Center */}
