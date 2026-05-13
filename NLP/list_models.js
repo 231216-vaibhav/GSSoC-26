@@ -1,7 +1,7 @@
 const axios = require("axios");
 
 async function listModels() {
-  const key = "AIzaSyBOm7iiSD7uBuhP2UEA-v5hEr7qQMn7Ano";
+  const key = "AIzaSyCNdasHBeuutMEkb1ajBCb5MUyHGlFQJ7g";
   try {
     const res = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
     const geminiModels = res.data.models.filter(m => m.name.includes("gemini") && m.supportedGenerationMethods.includes("generateContent"));
