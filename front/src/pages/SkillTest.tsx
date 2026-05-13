@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Brain, CheckCircle, XCircle, ChevronRight, RotateCcw,
@@ -14,7 +14,7 @@ interface MCQ {
 
 type TestPhase = 'intro' | 'loading' | 'quiz' | 'result';
 
-const NLP_API = 'http://localhost:5000/api/interview/generate';
+const NLP_API = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/interview/generate`;
 
 // Fallback questions per skill topic
 const FALLBACK_QUESTIONS: Record<string, MCQ[]> = {
@@ -54,7 +54,7 @@ export default function SkillTest() {
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
-  const [loadError, setLoadError] = useState('');
+  const [, setLoadError] = useState('');
 
   const fetchQuestions = async () => {
     setPhase('loading');

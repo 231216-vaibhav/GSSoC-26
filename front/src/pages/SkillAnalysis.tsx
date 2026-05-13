@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Upload, CheckCircle, XCircle, AlertCircle, ChevronRight,
+  Upload, CheckCircle, AlertCircle, ChevronRight,
   RotateCcw, FileText, Loader2, Code2, Star, Briefcase,
   Users, Zap, Trophy
 } from 'lucide-react';
@@ -23,7 +23,7 @@ interface ParsedResume {
   timestamp: number;
 }
 
-const NLP_API = 'http://localhost:5000/api/resume/parse';
+const NLP_API = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/resume/parse`;
 
 const questions: Record<string, { q: string; options: string[]; correct: number }[]> = {
   'JavaScript / TypeScript': [

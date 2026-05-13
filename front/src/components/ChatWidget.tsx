@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Loader2, Sparkles, Brain, Zap } from 'lucide-react';
+import { MessageCircle, X, Send, Loader2, Sparkles, Brain } from 'lucide-react';
 
 interface ChatMessage {
   role: 'user' | 'ai';
@@ -57,7 +57,8 @@ export default function ChatWidget() {
         }
       }
 
-      const response = await fetch('http://localhost:5000/api/ai-mentor', {
+      const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${BACKEND_URL}/api/ai-mentor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -46,7 +46,7 @@ const ROLE_REQUIREMENTS: Record<string, string[]> = {
 };
 
 // ─── Backend API (Gemini key stays server-side) ───────────────────────────────
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AIResponse {

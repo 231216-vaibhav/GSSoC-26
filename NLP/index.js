@@ -15,7 +15,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // ─── Collect up to 6 Gemini API keys ──────────────────────────────────────────
 const GEMINI_KEYS = [
-  'AIzaSyBOm7iiSD7uBuhP2UEA-v5hEr7qQMn7Ano',
   process.env.GEMINI_API_KEY,
   process.env.GEMINI_API_KEY_2,
   process.env.GEMINI_API_KEY_3,

@@ -1,32 +1,17 @@
-import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { 
-  Play, 
   Clock, 
-  ChevronRight, 
-  CheckCircle, 
-  RotateCcw, 
-  Mic, 
-  MicOff, 
   AlertTriangle, 
   Loader2, 
   Sparkles, 
   Video, 
   Volume2, 
-  Brain,
-  Monitor,
-  Target,
   Trophy,
-  Award,
   Check,
   X,
-  User,
-  MessageSquare,
   Zap,
   Activity,
-  Layers,
-  Cpu,
-  ShieldCheck,
-  ArrowRight
+  Cpu
 } from 'lucide-react';
 import { interviewQuestions } from '../data/mockData';
 import { auth, db } from '../firebase';
@@ -69,11 +54,7 @@ interface Evaluation {
   solution_explanation?: string;
 }
 
-const categoryColors: Record<string, string> = {
-  Behavioral: 'bg-blue-50 text-blue-600 border-blue-200',
-  Technical: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-  'System Design': 'bg-purple-50 text-purple-600 border-purple-200',
-};
+
 
 function MockInterviewContent() {
   const [stage, setStage] = useState<Stage>('intro');
@@ -87,7 +68,7 @@ function MockInterviewContent() {
   const [testMode, setTestMode] = useState<'quiz' | 'f2f' | null>(null);
   
   // Face-to-Face states
-  const [cameraOn, setCameraOn] = useState(false);
+  const [, setCameraOn] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   
@@ -206,7 +187,8 @@ function MockInterviewContent() {
          } catch(e) {}
       }
 
-      const res = await fetch('http://localhost:5000/api/interview/evaluate', {
+      const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${BACKEND_URL}/api/interview/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qaPairs, profile: profileData })
@@ -246,7 +228,8 @@ function MockInterviewContent() {
       const userSkills = parsed.skills?.map((s: any) => typeof s === 'string' ? s : s.name) || [];
       const userGaps = parsed.gaps || ['Core Fundamentals'];
       
-      const res = await fetch('http://localhost:5000/api/interview/generate', {
+      const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${BACKEND_URL}/api/interview/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
